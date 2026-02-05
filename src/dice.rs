@@ -1,110 +1,16 @@
-use std::array;
+pub mod dice_set;
+pub mod die;
+
+use std::{array, collections::HashMap};
 
 use rand::prelude::*;
 use raylib::math::Rectangle;
 
+pub use dice_set::DiceSet;
+pub use die::{Die, Face};
+
 pub const DICE_COUNT: usize = 5;
 
-#[repr(u8)]
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Face {
-    #[default]
-    Blank,
-    TenPoints,
-    Two,
-    Three,
-    Four,
-    FivePoints,
-    Six,
-    WildSun,
-}
-
-impl Face {
-    const fn texture_index(&self) -> usize {
-        match self {
-            Self::Blank | Self::TenPoints => 0,
-            Self::Two => 2,
-            Self::Three | Self::WildSun => 3,
-            Self::Four => 4,
-            Self::FivePoints => 1,
-            Self::Six => 5,
-        }
-    }
-
-    const fn point_value(&self) -> u32 {
-        match self {
-            Self::FivePoints => 5,
-            Self::TenPoints | Self::WildSun => 10,
-            _ => 0,
-        }
-    }
-
-    pub const fn is_scoring(&self) -> bool {
-        self.point_value() > 0
-    }
-
-    const fn face_value(&self) -> u32 {
-        match self {
-            Self::Two => 2,
-            Self::Three => 3,
-            Self::Four => 4,
-            Self::FivePoints => 5,
-            Self::Six => 6,
-            Self::TenPoints => 10,
-            _ => 0,
-        }
-    }
-
-    const fn will_supernova(&self) -> bool {
-        matches!(self, Self::TenPoints)
-    }
-
-    pub fn get_rect(&self, texture_index: usize) -> Rectangle {
-        Rectangle::new(
-            self.texture_index() as f32 * 32.0,
-            texture_index as f32 * 32.0,
-            32.0,
-            32.0,
-        )
-    }
-
-    pub const fn is_wild(&self) -> bool {
-        matches!(self, Self::WildSun)
-    }
-
-    pub fn matches(&self, other: &Self) -> bool {
-        self.is_wild() || other.is_wild() || self == other
-    }
-}
-
-#[derive(Default, Clone, Copy)]
-pub struct Die {
-    faces: [Face; 6],
-    texture_index: usize,
-}
-
-impl Die {
-    pub const fn new(faces: [Face; 6], texture_index: usize) -> Self {
-        Self {
-            faces,
-            texture_index,
-        }
-    }
-
-    pub fn roll(&self, rng: &mut impl Rng) -> Face {
-        self.faces[rng.random_range(0..6)]
-    }
-
-    pub fn face(&self, index: usize) -> Face {
-        self.faces[index.rem_euclid(6)]
-    }
-
-    pub fn face_rect(&self, index: usize) -> Rectangle {
-        self.face(index).get_rect(self.texture_index)
-    }
-}
-
-pub type DiceSet = [Die; DICE_COUNT];
 pub type BoolSet = [bool; DICE_COUNT];
 pub type Indices = Vec<usize>;
 pub type RollResult = [Face; DICE_COUNT];
@@ -145,20 +51,22 @@ const BLACK_DIE: Die = Die::new(
     1,
 );
 
-pub const DEFAULT_SET: DiceSet = [BLACK_DIE, WHITE_DIE, WHITE_DIE, WHITE_DIE, WHITE_DIE];
+pub const DEFAULT_SET: DiceSet =
+    DiceSet::new([WHITE_DIE, WHITE_DIE, WHITE_DIE, WHITE_DIE, BLACK_DIE]);
 
 pub fn roll_set(dice_set: &DiceSet, rng: &mut impl Rng) -> RollResult {
     array::from_fn(|i| dice_set[i].roll(rng))
 }
 
 pub fn result_rectangles(dice_set: &DiceSet, results: &RollResult) -> [Rectangle; DICE_COUNT] {
-    array::from_fn(|i| results[i].get_rect(dice_set[i].texture_index))
+    array::from_fn(|i| results[i].get_rect(dice_set[i].texture_index()))
 }
 
 pub fn replace_rolled_with_blanks(rolled: &BoolSet, results: &RollResult) -> RollResult {
     array::from_fn(|i| if rolled[i] { Face::Blank } else { results[i] })
 }
 
+#[derive(Debug)]
 pub struct Flash {
     pub face: Face,
     pub matches: [bool; DICE_COUNT],
@@ -175,6 +83,7 @@ fn check_for_freight_train(results: &RollResult) -> Option<Face> {
 }
 
 fn check_for_flash(results: &RollResult) -> Option<Flash> {
+    let mut best_flash = None;
     for i in 0..DICE_COUNT {
         if results[i].is_wild() || results[i] == Face::Blank {
             continue;
@@ -192,14 +101,19 @@ fn check_for_flash(results: &RollResult) -> Option<Flash> {
 
         if match_count >= 3 {
             matches[i] = true;
-            return Some(Flash {
-                face: results[i],
-                matches,
-                match_count,
-            });
+            if best_flash
+                .as_ref()
+                .is_none_or(|f: &Flash| results[i].face_value() > f.face.face_value())
+            {
+                best_flash = Some(Flash {
+                    face: results[i],
+                    matches,
+                    match_count,
+                });
+            }
         }
     }
-    None
+    best_flash
 }
 
 pub struct DiceState {
@@ -229,13 +143,22 @@ impl MoveOptions {
             can_reroll: Vec::new(),
         }
     }
+    pub fn must_reroll_indices(&self) -> Indices {
+        match &self.must_reroll {
+            Some(vec) if !vec.is_empty() => vec.clone(),
+            Some(_) => (0..DICE_COUNT).collect(),
+            None => Vec::new(),
+        }
+    }
 }
 
+#[derive(Debug)]
 pub enum MoveType {
     FreightTrain(Face),
     Flash(Flash),
 }
 
+#[derive(Debug)]
 pub struct MoveResult {
     pub current_score: u32,
     // None: wimped out
@@ -258,16 +181,78 @@ impl MoveResult {
             move_type: None,
         }
     }
+    pub fn rerollable_dice(&self, selected: &Indices) -> Indices {
+        if let Some(options) = &self.move_options {
+            let mut rerollable = options.can_reroll.clone();
+            if let Some(reroll_choice) = options
+                .must_reroll_one_of
+                .iter()
+                .find(|index| selected.contains(*index))
+            {
+                rerollable.push(*reroll_choice);
+            } else {
+                rerollable.extend_from_slice(&options.must_reroll_one_of);
+            }
+            rerollable
+        } else {
+            Vec::new()
+        }
+    }
+    pub fn valid_reroll(&self, selected: &Indices) -> bool {
+        if let Some(options) = &self.move_options {
+            // Make sure all dice that must be rerolled are rerolled
+            if !options
+                .must_reroll_indices()
+                .iter()
+                .all(|i| selected.contains(i))
+            {
+                return false;
+            }
+
+            // Make sure that exactly ONE die from the set is selected
+            if !options.must_reroll_one_of.is_empty()
+                && options
+                    .must_reroll_one_of
+                    .iter()
+                    .map(|i| if selected.contains(i) { 1 } else { 0 })
+                    .sum::<u32>()
+                    != 1
+            {
+                return false;
+            }
+
+            // Make sure that all dice are rerollable
+            let rerollable = self.rerollable_dice(selected);
+            for die in selected {
+                if !options.must_reroll_indices().contains(die) && !rerollable.contains(die) {
+                    return false;
+                }
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn can_end_turn(&self) -> bool {
+        self.move_options
+            .as_ref()
+            .is_some_and(|o| o.must_reroll.is_none() && o.must_reroll_one_of.is_empty())
+    }
 }
 
 impl DiceState {
-    pub fn random(dice_set: &DiceSet, rng: &mut impl Rng) -> Self {
-        let current_roll = roll_set(dice_set, rng);
-        let dice_last_rolled = [true; DICE_COUNT];
+    pub fn new(current_roll: RollResult, dice_last_rolled: BoolSet) -> Self {
         Self {
             current_roll,
             dice_last_rolled,
         }
+    }
+    pub fn random(dice_set: &DiceSet, rng: &mut impl Rng) -> Self {
+        let current_roll = roll_set(dice_set, rng);
+        let dice_last_rolled = [true; DICE_COUNT];
+        Self::new(current_roll, dice_last_rolled)
     }
 
     pub fn reroll(&mut self, dice_set: &DiceSet, rng: &mut impl Rng, reroll: Indices) {
@@ -277,11 +262,11 @@ impl DiceState {
         }
     }
 
-    fn rolled_all_dice(&self) -> bool {
+    pub fn rolled_all_dice(&self) -> bool {
         self.dice_last_rolled == [true; DICE_COUNT]
     }
 
-    fn is_clearing_flash(&self) -> Option<Flash> {
+    pub fn is_clearing_flash(&self) -> bool {
         // We are clearing a flash if and only if the non-rolled dice contain a flash.
         // This will be determined by replacing the rolled dice with blank faces, and checking
         // for a flash that way.
@@ -289,6 +274,7 @@ impl DiceState {
             &self.dice_last_rolled,
             &self.current_roll,
         ))
+        .is_some()
     }
 
     fn last_rolled_dice_scored(&self) -> bool {
@@ -317,6 +303,7 @@ impl DiceState {
             .filter_map(|(i, in_flash)| (!in_flash).then_some(self.current_roll[i].point_value()))
             .sum();
 
+        println!("{flash:?}");
         if flash.match_count == 4 {
             // Reroll clause
             if non_scoring_dice.is_empty() {
@@ -395,7 +382,7 @@ impl DiceState {
                 return MoveResult::wimped_out();
             } else {
                 return MoveResult::all_scoring(
-                    face.point_value() * 100,
+                    face.face_value() * 100,
                     Some(MoveType::FreightTrain(face)),
                 );
             }
@@ -422,7 +409,8 @@ impl DiceState {
                 };
             }
         } else {
-            if let Some(flash) = self.is_clearing_flash() {
+            if self.is_clearing_flash() {
+                let flash = check_for_flash(&self.current_roll).unwrap();
                 return self.calculate_flash_result(flash, true);
             } else if let Some(flash) = check_for_flash(&self.current_roll) {
                 // Rolled into a flash that must now be cleared
