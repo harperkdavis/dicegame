@@ -1,8 +1,9 @@
 mod assets;
 mod dice;
+mod game;
 mod interface;
 mod test;
-mod util;
+pub mod util;
 
 use assets::Assets;
 use dice::DEFAULT_SET;
@@ -35,13 +36,13 @@ fn main() -> eyre::Result<()> {
 
     music.set_volume(0.5);
     music.looping = true;
-    // music.play_stream();
+    music.play_stream();
 
     test::print_complete_statistics(&DEFAULT_SET);
 
     let mut rng = rand::rng();
 
-    let mut state = AttackInterface::new(DEFAULT_SET);
+    let mut interface: Option<AttackInterface> = None;
     let mut frame_count = 0;
 
     while !rl.window_should_close() {
@@ -49,7 +50,19 @@ fn main() -> eyre::Result<()> {
         let mut d = rl.begin_drawing(&rt);
 
         let time = d.get_time();
-        state.update(&d, &assets, &mut rng, time);
+        if d.is_key_pressed(KeyboardKey::KEY_Z)
+            && interface.as_ref().is_none_or(|i| i.can_advance(time))
+        {
+            interface = Some(AttackInterface::new_round(
+                &assets,
+                DEFAULT_SET,
+                &mut rng,
+                time,
+                Vector2::new(50.0, 50.0),
+            ))
+        } else if let Some(state) = &mut interface {
+            state.update(&d, &assets, &mut rng, time);
+        }
 
         let mut dd = d.begin_mode2D(camera);
 
@@ -112,7 +125,9 @@ fn main() -> eyre::Result<()> {
             Color::WHITE,
         );
 
-        state.draw(&mut dd, &assets, time, frame_count, &font, &mut rng);
+        if let Some(state) = &interface {
+            state.draw(&mut dd, &assets, time, frame_count, &font, &mut rng);
+        }
 
         frame_count += 1;
     }
