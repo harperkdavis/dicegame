@@ -1,7 +1,7 @@
 pub mod dice_set;
 pub mod die;
 
-use std::{array, collections::HashMap};
+use std::array;
 
 use rand::prelude::*;
 use raylib::math::Rectangle;
@@ -303,7 +303,6 @@ impl DiceState {
             .filter_map(|(i, in_flash)| (!in_flash).then_some(self.current_roll[i].point_value()))
             .sum();
 
-        println!("{flash:?}");
         if flash.match_count == 4 {
             // Reroll clause
             if non_scoring_dice.is_empty() {
