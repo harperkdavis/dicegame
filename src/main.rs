@@ -11,7 +11,7 @@ use interface::BattleInterface;
 use raylib::prelude::*;
 
 fn main() -> eyre::Result<()> {
-    let (mut rl, rt) = raylib::init().size(1280, 960).title("Hello, World").build();
+    let (mut rl, rt) = raylib::init().size(640, 480).title("Hello, World").build();
     let ra = RaylibAudio::init_audio_device()?;
 
     let mut music = ra
@@ -28,9 +28,9 @@ fn main() -> eyre::Result<()> {
         .expect("could not load font");
 
     let camera = Camera2D {
-        target: Vector2::new(320.0 / 2.0, 240.0 / 2.0),
+        target: Vector2::new(320.0, 240.0),
         offset: Vector2::new(320.0, 240.0),
-        zoom: 2.0,
+        zoom: 1.0,
         rotation: 0.0,
     };
 
