@@ -7,7 +7,7 @@ pub mod util;
 
 use assets::Assets;
 use dice::DEFAULT_SET;
-use interface::AttackInterface;
+use interface::BattleInterface;
 use raylib::prelude::*;
 
 fn main() -> eyre::Result<()> {
@@ -34,7 +34,7 @@ fn main() -> eyre::Result<()> {
         rotation: 0.0,
     };
 
-    music.set_volume(0.5);
+    music.set_volume(0.3);
     music.looping = true;
     music.play_stream();
 
@@ -42,7 +42,7 @@ fn main() -> eyre::Result<()> {
 
     let mut rng = rand::rng();
 
-    let mut interface: Option<AttackInterface> = None;
+    let mut interface: BattleInterface = BattleInterface::new(0.0);
     let mut frame_count = 0;
 
     while !rl.window_should_close() {
@@ -50,19 +50,8 @@ fn main() -> eyre::Result<()> {
         let mut d = rl.begin_drawing(&rt);
 
         let time = d.get_time();
-        if d.is_key_pressed(KeyboardKey::KEY_Z)
-            && interface.as_ref().is_none_or(|i| i.can_advance(time))
-        {
-            interface = Some(AttackInterface::new_round(
-                &assets,
-                DEFAULT_SET,
-                &mut rng,
-                time,
-                Vector2::new(50.0, 50.0),
-            ))
-        } else if let Some(state) = &mut interface {
-            state.update(&d, &assets, &mut rng, time);
-        }
+
+        interface.update(&d, &assets, &mut rng, time);
 
         let mut dd = d.begin_mode2D(camera);
 
@@ -90,44 +79,7 @@ fn main() -> eyre::Result<()> {
         );
         drop(sm);
 
-        dd.draw_texture(assets.get_texture("enemy"), 350, 50, Color::WHITE);
-
-        dd.draw_texture(assets.get_texture("girl2"), 100, 300, Color::WHITE);
-        dd.draw_texture(
-            assets.get_texture("girl_torso"),
-            10,
-            480 - 128 + (f64::sin(time * 2.0) * 4.0).round() as i32,
-            Color::WHITE,
-        );
-
-        dd.draw_texture(
-            assets.get_texture("girl3"),
-            140,
-            480 - 128 + (f64::sin(time * 2.0 + 1.0) * 4.0).round() as i32,
-            Color::WHITE,
-        );
-
-        dd.draw_text_ex(
-            &font,
-            "ENN",
-            Vector2::new(55.0, 460.0),
-            16.0,
-            1.0,
-            Color::WHITE,
-        );
-
-        dd.draw_text_ex(
-            &font,
-            "KUE",
-            Vector2::new(185.0, 460.0),
-            16.0,
-            1.0,
-            Color::WHITE,
-        );
-
-        if let Some(state) = &interface {
-            state.draw(&mut dd, &assets, time, frame_count, &font, &mut rng);
-        }
+        interface.draw(&mut dd, &assets, time, frame_count, &font, &mut rng);
 
         frame_count += 1;
     }

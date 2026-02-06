@@ -1,6 +1,8 @@
 mod attack;
+mod battle;
 
 pub use attack::AttackInterface;
+pub use battle::BattleInterface;
 
 use crate::assets::Assets;
 use raylib::prelude::*;

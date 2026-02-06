@@ -54,6 +54,8 @@ const BLACK_DIE: Die = Die::new(
 pub const DEFAULT_SET: DiceSet =
     DiceSet::new([WHITE_DIE, WHITE_DIE, WHITE_DIE, WHITE_DIE, BLACK_DIE]);
 
+pub const COMMON_SET: DiceSet = DiceSet::new([WHITE_DIE; 5]);
+
 pub fn roll_set(dice_set: &DiceSet, rng: &mut impl Rng) -> RollResult {
     array::from_fn(|i| dice_set[i].roll(rng))
 }

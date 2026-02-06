@@ -616,6 +616,9 @@ impl AttackInterface {
                 while !self.anim_rolling.is_empty() {
                     self.tick(assets, rng, time);
                 }
+                assets.get_sound("roll_short").stop();
+                assets.get_sound("roll_long").stop();
+                assets.get_sound("drumroll_short").stop();
             }
             if time > self.beat_start + 0.5 {
                 self.tick(assets, rng, time);
@@ -623,13 +626,17 @@ impl AttackInterface {
             }
         } else if let Some(pointer) = self.turn.pointer {
             if d.is_key_pressed(KeyboardKey::KEY_LEFT) {
-                self.turn.move_left();
+                if self.turn.move_left() {
+                    assets.get_sound("menu").play();
+                }
                 if let Some(pointer) = self.turn.pointer {
                     self.anim_hover[pointer] = Some(time);
                 }
             }
             if d.is_key_pressed(KeyboardKey::KEY_RIGHT) {
-                self.turn.move_right();
+                if self.turn.move_right() {
+                    assets.get_sound("menu").play();
+                }
                 if let Some(pointer) = self.turn.pointer {
                     self.anim_hover[pointer] = Some(time);
                 }
@@ -643,6 +650,7 @@ impl AttackInterface {
                     if can_attack {
                         let total = self.turn.current_score();
                         self.round_end = Some(time);
+                        assets.get_sound("select").play();
                         return Some(total);
                     }
                 } else if pointer == INDEX_BUTTON_FIRST {
@@ -676,6 +684,7 @@ impl AttackInterface {
                         _ => (), // error
                     }
                 } else if let Some(enabled) = self.turn.toggle_die() {
+                    assets.get_sound("select").play();
                     if enabled {
                         self.anim_select[pointer] = Some(time);
                         self.anim_deselect[pointer] = None;
@@ -842,12 +851,12 @@ impl AttackInterface {
 
                 let attack_out = ((attack_elapsed - 1.0).max(0.0) * 4.0).powi(3) as f32;
 
-                let target_offset_x = 570.0 - self.target_pos.y;
+                let target_offset_x = 570.0 - self.target_pos.x;
                 let target_offset_y = self.target_pos.y - 30.0;
 
                 d.draw_texture_rec(
                     assets.get_texture("bignumbers"),
-                    Rectangle::new(digit as f32 * 20.0, 0.0, 20.0, 40.0),
+                    Rectangle::new(digit as f32 * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         590.0
                             - 24.0 * i as f32
@@ -873,7 +882,7 @@ impl AttackInterface {
             for (i, o) in OFFSETS.iter().enumerate() {
                 d.draw_texture_rec(
                     assets.get_texture("bignumbers"),
-                    Rectangle::new(*o * 20.0, 0.0, 20.0, 40.0),
+                    Rectangle::new(*o * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         590.0 - 24.0 * i as f32 + rng.random_range(-2.0..2.0),
                         30.0 + rng.random_range(-2.0..2.0)
@@ -892,8 +901,9 @@ impl AttackInterface {
             let y = 10.0 + 40.0 * 0.5_f64.powf(time_elapsed * 8.0);
 
             if turn_end_elapsed.is_none_or(|t| t < 2.0) {
-                let y =
-                    y + turn_end_elapsed.map_or(0.0, |t| 1.0 - ((t - 1.0).max(0.0).powi(2)) * 40.0);
+                let y = y + turn_end_elapsed
+                    .map_or(0.0, |t| 1.0 - ((t - 1.0).max(0.0).powi(2)) * 40.0)
+                    - out_anim * 40.0;
                 d.draw_text_ex(
                     font,
                     &format!("+{plus_score}"),
@@ -981,6 +991,10 @@ impl AttackInterface {
                 }
             }
         }
+    }
+
+    pub fn damage_apply_time(&self) -> Option<f64> {
+        self.round_end.map(|e| e + 0.5)
     }
 
     pub fn can_advance(&self, time: f64) -> bool {

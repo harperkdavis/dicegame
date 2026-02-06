@@ -58,7 +58,7 @@ void main() {
     
     vec3 gradientToTopLeft = vec3(fragTexCoord.x - fragTexCoord.y);
 
-    vec3 color = (upLeftTexelFast.rgb * 0.5 * LIGHT_COLOR + downRightTexelFast.rgb * 0.5 * LIGHT_COLOR + upLeftTexelSlow.rgb * DARK_COLOR * 2.0 + downRightTexelSlow.rgb * DARK_COLOR * 2.0 + gradientToTopLeft * 0.5) / 4.0;
+    vec3 color = (upLeftTexelFast.rgb * 0.5 * LIGHT_COLOR + downRightTexelFast.rgb * 0.5 * LIGHT_COLOR + upLeftTexelSlow.rgb * DARK_COLOR * 2.0 + downRightTexelSlow.rgb * DARK_COLOR * 2.0 + gradientToTopLeft) / 6.0;
 
     float threshold = bayer4x4(gl_FragCoord.xy / 2.0);
 
