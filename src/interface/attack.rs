@@ -2,11 +2,11 @@ use rand::Rng;
 use raylib::prelude::*;
 
 use crate::{
-    assets::Assets,
     dice::{
         DICE_COUNT, DiceSet, DiceState, Indices, MoveResult, MoveType, boolset_to_indices,
         result_rectangles,
     },
+    res::Res,
     util::lerp,
 };
 
@@ -344,7 +344,7 @@ impl AttackInterface {
     }
 
     pub fn new_round(
-        assets: &Assets,
+        res: &Res,
         dice_set: DiceSet,
         rng: &mut impl Rng,
         time: f64,
@@ -357,7 +357,7 @@ impl AttackInterface {
             (0..DICE_COUNT).rev().collect(),
         );
 
-        assets.get_sound("roll_short").play();
+        res.snd("roll_short").play();
         new
     }
 
@@ -410,13 +410,13 @@ impl AttackInterface {
         }
     }
 
-    fn play_score_sound(assets: &Assets, pitch: usize) {
-        let score_sound = assets.get_sound("score");
+    fn play_score_sound(res: &Res, pitch: usize) {
+        let score_sound = &res.snd("score");
         score_sound.set_pitch(2.0_f32.powf(1.0 / 12.0).powi(pitch as i32));
         score_sound.play();
     }
 
-    fn tick(&mut self, assets: &Assets, rng: &mut impl Rng, time: f64) {
+    fn tick(&mut self, res: &Res, rng: &mut impl Rng, time: f64) {
         let rounded_down_time = (time * 2.0).floor() / 2.0;
 
         if self.anim_rolling.is_empty() {
@@ -424,17 +424,17 @@ impl AttackInterface {
             self.anim_score = self.turn.current_score() as f64;
             if let Some(options) = self.turn.move_result.move_options.as_ref() {
                 if options.must_reroll.as_ref().is_some_and(|v| v.is_empty()) {
-                    assets.get_sound("full_clear").play();
+                    res.snd("full_clear").play();
                     self.anim_shakes = [Some(rounded_down_time); DICE_COUNT];
                     self.anim_oscillates = [Some(rounded_down_time); DICE_COUNT];
                 } else if let Some(MoveType::Flash(flash)) = &self.turn.move_result.move_type {
                     if self.turn.dice_state.is_clearing_flash() && flash.match_count == 3 {
-                        assets.get_sound("clear").play();
+                        res.snd("clear").play();
                     } else {
-                        assets.get_sound("flash").play();
+                        res.snd("flash").play();
                     }
                 } else {
-                    assets.get_sound("safe").play();
+                    res.snd("safe").play();
                 }
                 if let Some(must_reroll) = options.must_reroll.as_ref() {
                     for i in must_reroll {
@@ -445,9 +445,9 @@ impl AttackInterface {
             } else {
                 self.anim_shakes = [Some(rounded_down_time); DICE_COUNT];
                 if self.turn.dice_state.dice_last_rolled.iter().all(|b| *b) {
-                    assets.get_sound("cosmic_wimpout").play();
+                    res.snd("cosmic_wimpout").play();
                 } else {
-                    assets.get_sound("wimpout").play();
+                    res.snd("wimpout").play();
                 }
             }
 
@@ -458,12 +458,12 @@ impl AttackInterface {
 
         if self.anim_suspense {
             self.anim_suspense = false;
-            assets.get_sound("drumroll_short").play();
+            res.snd("drumroll_short").play();
             return;
         }
 
         let die_sound = self.anim_dice_sounds.pop().unwrap_or("die_1".to_string());
-        let die_sound = assets.get_sound(&die_sound);
+        let die_sound = res.snd(die_sound.as_str());
         die_sound.set_pitch(rng.random_range(0.95..=1.05));
         die_sound.play();
 
@@ -472,7 +472,7 @@ impl AttackInterface {
 
         let face = self.turn.dice_state.current_roll[die_to_reveal];
         if face.is_scoring() {
-            Self::play_score_sound(assets, self.anim_bell_pitch);
+            Self::play_score_sound(res, self.anim_bell_pitch);
             self.anim_scores
                 .push((die_to_reveal, face.point_value(), rounded_down_time));
             self.anim_color[die_to_reveal] = DiceDisplay::Scoring;
@@ -482,10 +482,10 @@ impl AttackInterface {
         match &self.turn.move_result.move_type {
             Some(MoveType::Flash(flash)) => {
                 if self.anim_is_clearing_flash && face.is_scoring() {
-                    assets.get_sound("roll_long").stop();
+                    res.snd("roll_long").stop();
                     self.anim_is_clearing_flash = false;
                     if !flash.matches[die_to_reveal] {
-                        assets.get_sound("crash_long").play();
+                        res.snd("crash_long").play();
                     }
                 }
                 if flash.matches[die_to_reveal] {
@@ -494,7 +494,7 @@ impl AttackInterface {
                         .count();
 
                     if reveal_count == 3 {
-                        assets.get_sound("crash_short").play();
+                        res.snd("crash_short").play();
                         for (i, matches) in flash.matches.iter().enumerate() {
                             if *matches && !self.anim_rolling.contains(&i) {
                                 self.anim_color[i] = DiceDisplay::PartOfFlash;
@@ -509,7 +509,7 @@ impl AttackInterface {
                             rounded_down_time,
                         ));
                     } else if reveal_count == 4 {
-                        assets.get_sound("reroll_clause").play();
+                        res.snd("reroll_clause").play();
                         for i in 0..DICE_COUNT {
                             if flash.matches[i] {
                                 self.anim_color[i] = DiceDisplay::MustRerollOneOf;
@@ -528,7 +528,7 @@ impl AttackInterface {
                 self.anim_shakes[die_to_reveal] = Some(rounded_down_time);
 
                 if !face.is_scoring() {
-                    Self::play_score_sound(assets, self.anim_bell_pitch);
+                    Self::play_score_sound(res, self.anim_bell_pitch);
                     self.anim_bell_pitch += 1;
                 }
                 if self.anim_rolling.is_empty() {
@@ -551,7 +551,7 @@ impl AttackInterface {
         {
             self.anim_suspense = true;
         } else if self.anim_rolling.is_empty() {
-            assets.get_sound("roll_long").stop();
+            res.snd("roll_long").stop();
         }
     }
 
@@ -589,7 +589,7 @@ impl AttackInterface {
     pub fn update(
         &mut self,
         d: &RaylibDrawHandle,
-        assets: &Assets,
+        res: &Res,
         rng: &mut impl Rng,
         time: f64,
     ) -> Option<u32> {
@@ -614,20 +614,20 @@ impl AttackInterface {
             if d.is_key_pressed(KeyboardKey::KEY_Z) {
                 self.beat_start = time - 0.5;
                 while !self.anim_rolling.is_empty() {
-                    self.tick(assets, rng, time);
+                    self.tick(res, rng, time);
                 }
-                assets.get_sound("roll_short").stop();
-                assets.get_sound("roll_long").stop();
-                assets.get_sound("drumroll_short").stop();
+                res.snd("roll_short").stop();
+                res.snd("roll_long").stop();
+                res.snd("drumroll_short").stop();
             }
             if time > self.beat_start + 0.5 {
-                self.tick(assets, rng, time);
+                self.tick(res, rng, time);
                 self.beat_start = (time * 2.0).floor() / 2.0;
             }
         } else if let Some(pointer) = self.turn.pointer {
             if d.is_key_pressed(KeyboardKey::KEY_LEFT) {
                 if self.turn.move_left() {
-                    assets.get_sound("menu").play();
+                    res.snd("menu").play();
                 }
                 if let Some(pointer) = self.turn.pointer {
                     self.anim_hover[pointer] = Some(time);
@@ -635,7 +635,7 @@ impl AttackInterface {
             }
             if d.is_key_pressed(KeyboardKey::KEY_RIGHT) {
                 if self.turn.move_right() {
-                    assets.get_sound("menu").play();
+                    res.snd("menu").play();
                 }
                 if let Some(pointer) = self.turn.pointer {
                     self.anim_hover[pointer] = Some(time);
@@ -650,7 +650,7 @@ impl AttackInterface {
                     if can_attack {
                         let total = self.turn.current_score();
                         self.round_end = Some(time);
-                        assets.get_sound("select").play();
+                        res.snd("select").play();
                         return Some(total);
                     }
                 } else if pointer == INDEX_BUTTON_FIRST {
@@ -659,7 +659,7 @@ impl AttackInterface {
                         MoveButton::Another => {
                             let prev_score = self.turn.current_score();
                             self.turn.another(rng);
-                            assets.get_sound("roll_short").play();
+                            res.snd("roll_short").play();
                             self.set_rolling_animation_state(
                                 prev_score,
                                 (time * 2.0).ceil() / 2.0,
@@ -671,9 +671,9 @@ impl AttackInterface {
                             self.turn.reroll(rng);
                             self.anim_is_clearing_flash = self.turn.dice_state.is_clearing_flash();
                             if self.anim_is_clearing_flash {
-                                assets.get_sound("roll_long").play();
+                                res.snd("roll_long").play();
                             } else {
-                                assets.get_sound("roll_short").play();
+                                res.snd("roll_short").play();
                             };
                             self.set_rolling_animation_state(
                                 prev_score,
@@ -684,7 +684,7 @@ impl AttackInterface {
                         _ => (), // error
                     }
                 } else if let Some(enabled) = self.turn.toggle_die() {
-                    assets.get_sound("select").play();
+                    res.snd("select").play();
                     if enabled {
                         self.anim_select[pointer] = Some(time);
                         self.anim_deselect[pointer] = None;
@@ -705,7 +705,7 @@ impl AttackInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        assets: &Assets,
+        res: &Res,
         time: f64,
         frame_count: usize,
         font: &Font,
@@ -718,26 +718,26 @@ impl AttackInterface {
         let out_anim = (end_elapsed * 4.0).powi(3);
 
         d.draw_texture(
-            assets.get_texture("dice_background"),
+            res.tex("dice_background"),
             0,
             -20 - (128.0 * turn_anim.powi(2) + out_anim as f32 * 10.0) as i32,
             Color::WHITE,
         );
 
         d.draw_texture(
-            assets.get_texture("cyber1"),
+            res.tex("cyber1"),
             25,
             25 - (120.0 * turn_anim + out_anim as f32 * 20.0) as i32,
             Color::WHITE,
         );
         d.draw_texture(
-            assets.get_texture("cyber1_flipped"),
+            res.tex("cyber1_flipped"),
             310,
             25 - (120.0 * turn_anim + out_anim as f32 * 20.0) as i32,
             Color::WHITE,
         );
         d.draw_texture(
-            assets.get_texture("cyber2"),
+            res.tex("cyber2"),
             57,
             36 - (100.0 * turn_anim + out_anim as f32 * 15.0) as i32,
             Color::new(255, 255, 255, 127),
@@ -750,7 +750,7 @@ impl AttackInterface {
             if self.anim_rolling.contains(&i) {
                 draw_die(
                     d,
-                    assets,
+                    res,
                     84.0 + i as f32 * 50.0 + rng.random_range(-4.0..=4.0),
                     4.0 + rng.random_range(-4.0..=4.0) - turn_anim * (80.0 + i as f32 * 20.0),
                     &self.dice_set[i].face_rect(i + frame_count),
@@ -826,7 +826,7 @@ impl AttackInterface {
                 );
                 draw_die(
                     d,
-                    assets,
+                    res,
                     84.0 + i as f32 * 50.0 + x_offset as f32,
                     54.0 + y_offset as f32,
                     &rect,
@@ -855,7 +855,7 @@ impl AttackInterface {
                 let target_offset_y = self.target_pos.y - 30.0;
 
                 d.draw_texture_rec(
-                    assets.get_texture("bignumbers"),
+                    res.tex("bignumbers"),
                     Rectangle::new(digit as f32 * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         590.0
@@ -881,7 +881,7 @@ impl AttackInterface {
             const OFFSETS: [f32; 4] = [12.0, 12.0, 11.0, 10.0];
             for (i, o) in OFFSETS.iter().enumerate() {
                 d.draw_texture_rec(
-                    assets.get_texture("bignumbers"),
+                    res.tex("bignumbers"),
                     Rectangle::new(*o * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         590.0 - 24.0 * i as f32 + rng.random_range(-2.0..2.0),
@@ -935,7 +935,7 @@ impl AttackInterface {
                 if out_anim < 0.2 {
                     for i in &self.turn.menu {
                         d.draw_texture(
-                            assets.get_texture("hand"),
+                            res.tex("hand"),
                             get_menu_x(*i) as i32 - 16,
                             82,
                             Color::color_from_hsv(0.0, 0.0, f32::max(0.0, 0.2 - 0.2 * anim_in)),
@@ -950,7 +950,7 @@ impl AttackInterface {
                 };
 
                 d.draw_texture_rec(
-                    assets.get_texture("battle_buttons"),
+                    res.tex("battle_buttons"),
                     Rectangle::new(0.0, first_tex_y, 64.0, 32.0),
                     Vector2::new(
                         360.0,
@@ -964,7 +964,7 @@ impl AttackInterface {
                 );
 
                 d.draw_texture_rec(
-                    assets.get_texture("battle_buttons"),
+                    res.tex("battle_buttons"),
                     Rectangle::new(0.0, 0.0, 64.0, 32.0),
                     Vector2::new(
                         430.0,
@@ -983,7 +983,7 @@ impl AttackInterface {
 
                 if out_anim < 1.0 {
                     d.draw_texture(
-                        assets.get_texture("hand"),
+                        res.tex("hand"),
                         pointer_x as i32 - 16,
                         82,
                         Color::color_from_hsv(0.0, 0.0, 1.0 - anim_in),

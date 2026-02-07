@@ -4,9 +4,8 @@ use rand::Rng;
 use raylib::prelude::*;
 
 use crate::{
-    assets::Assets,
-    dice::DEFAULT_SET,
     game::{Action, Battle, enemy::FLESHTHING, party::ENN},
+    res::Res,
     util::lerp,
 };
 
@@ -82,7 +81,7 @@ impl BattleInterface {
         self.anim_enemy_damage = iter::repeat_n(None, enemy_count).collect();
     }
 
-    pub fn update(&mut self, d: &RaylibDrawHandle, assets: &Assets, rng: &mut impl Rng, time: f64) {
+    pub fn update(&mut self, d: &RaylibDrawHandle, res: &Res, rng: &mut impl Rng, time: f64) {
         for i in 0..self.battle.party().len() {
             self.anim_actions_menu[i] = lerp(
                 self.anim_actions_menu[i],
@@ -117,15 +116,15 @@ impl BattleInterface {
                 }
                 if d.is_key_pressed(KeyboardKey::KEY_X) {
                     self.enemy_select = None;
-                    assets.get_sound("menu").play();
+                    res.snd("menu").play();
                 } else if d.is_key_pressed(KeyboardKey::KEY_Z) {
                     self.battle.push_action(Action::Attack(*enemy));
-                    assets.get_sound("select").play();
+                    res.snd("select").play();
                     self.enemy_select = None;
                 }
             } else {
                 if d.is_key_pressed(KeyboardKey::KEY_UP) {
-                    assets.get_sound("menu").play();
+                    res.snd("menu").play();
                     if self.action_select == 0 {
                         self.action_select = 2;
                     } else {
@@ -133,7 +132,7 @@ impl BattleInterface {
                     }
                 }
                 if d.is_key_pressed(KeyboardKey::KEY_DOWN) {
-                    assets.get_sound("menu").play();
+                    res.snd("menu").play();
                     if self.action_select == 2 {
                         self.action_select = 0;
                     } else {
@@ -141,7 +140,7 @@ impl BattleInterface {
                     }
                 }
                 if d.is_key_pressed(KeyboardKey::KEY_Z) && self.action_select == 0 {
-                    assets.get_sound("select").play();
+                    res.snd("select").play();
                     self.enemy_select = Some(0);
                 }
             }
@@ -150,10 +149,8 @@ impl BattleInterface {
             if time > self.anim_last_damage + 1.0 {
                 self.anim_last_damage = time;
                 if let Some((target, damage)) = self.anim_party_damage_queue.pop() {
-                    assets
-                        .get_sound("party_hurt")
-                        .set_pitch(rng.random_range(0.9..1.1));
-                    assets.get_sound("party_hurt").play();
+                    res.snd("party_hurt").set_pitch(rng.random_range(0.9..1.1));
+                    res.snd("party_hurt").play();
                     self.anim_party_damage[target] = Some((time, damage));
                 } else {
                     self.is_enemy_turn = false;
@@ -171,15 +168,11 @@ impl BattleInterface {
                             && self.anim_enemy_damage[*target].is_none()
                         {
                             if *damage == 0 {
-                                assets
-                                    .get_sound("miss")
-                                    .set_pitch(rng.random_range(0.9..1.1));
-                                assets.get_sound("miss").play();
+                                res.snd("miss").set_pitch(rng.random_range(0.9..1.1));
+                                res.snd("miss").play();
                             } else {
-                                assets
-                                    .get_sound("enemy_hurt")
-                                    .set_pitch(rng.random_range(0.9..1.1));
-                                assets.get_sound("enemy_hurt").play();
+                                res.snd("enemy_hurt").set_pitch(rng.random_range(0.9..1.1));
+                                res.snd("enemy_hurt").play();
                             }
                             self.anim_enemy_damage[*target] = Some((dat, *damage))
                         }
@@ -190,13 +183,13 @@ impl BattleInterface {
                             self.current_action = None;
                         }
                     } else if let Some(attack) = &mut self.attack {
-                        if let Some(damage) = attack.update(d, assets, rng, time) {
+                        if let Some(damage) = attack.update(d, res, rng, time) {
                             self.attack_result = Some(damage);
                             self.battle.apply_damage(*target, damage);
                         }
                     } else {
                         self.attack = Some(AttackInterface::new_round(
-                            assets,
+                            res,
                             self.battle.party()[*party_member].info().default_dice_set,
                             rng,
                             time,
@@ -219,15 +212,15 @@ impl BattleInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        assets: &Assets,
+        res: &Res,
         time: f64,
         frame_count: usize,
-        font: &Font,
         rng: &mut impl Rng,
     ) {
+        let font = res.fnt("default");
         // draw actual battle
         for (i, enemy) in self.battle.enemies().iter().enumerate() {
-            let sprite = assets.get_texture(enemy.info().sprite);
+            let sprite = res.tex(enemy.info().sprite);
             if let Some((start, damage)) = self.anim_enemy_damage[i] {
                 let anim = 0.5_f32.powf((time - start) as f32 * 4.0);
                 if damage == 0 {
@@ -275,10 +268,10 @@ impl BattleInterface {
                 }
             }
         }
-        d.draw_texture(assets.get_texture("girl2"), 100, 300, Color::WHITE);
+        d.draw_texture(res.tex("girl2"), 100, 300, Color::WHITE);
 
         for (i, member) in self.battle.party().iter().enumerate() {
-            let sprite = assets.get_texture(member.info().sprite);
+            let sprite = res.tex(member.info().sprite);
             let anim = self.anim_actions_menu[i];
             let anim_y = (anim * 80.0).round() as i32;
             let x_offset = (i * 160) as i32;
@@ -352,7 +345,7 @@ impl BattleInterface {
                 Color::WHITE,
             );
 
-            let action_buttons = assets.get_texture("battle_actions");
+            let action_buttons = res.tex("battle_actions");
 
             for j in 0..4 {
                 d.draw_texture_rec(
@@ -372,7 +365,7 @@ impl BattleInterface {
         }
 
         if let Some(attack) = &self.attack {
-            attack.draw(d, assets, time, frame_count, font, rng);
+            attack.draw(d, res, time, frame_count, font, rng);
         }
     }
 }

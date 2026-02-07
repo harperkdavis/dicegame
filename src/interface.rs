@@ -4,13 +4,14 @@ mod battle;
 pub use attack::AttackInterface;
 pub use battle::BattleInterface;
 
-use crate::assets::Assets;
 use raylib::prelude::*;
+
+use crate::res::Res;
 
 #[allow(clippy::too_many_arguments)]
 fn draw_die(
     dd: &mut impl RaylibDraw,
-    assets: &Assets,
+    res: &Res,
     center_x: f32,
     center_y: f32,
     rect: &Rectangle,
@@ -18,8 +19,8 @@ fn draw_die(
     inner_tint: Color,
     squish: f32,
 ) {
-    let border_tex = assets.get_texture("dice_border");
-    let dice_tex = assets.get_texture("dice_textured");
+    let border_tex = res.tex("dice_border");
+    let dice_tex = res.tex("dice_textured");
 
     dd.draw_texture_pro(
         border_tex,
