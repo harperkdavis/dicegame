@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod dice;
 mod game;
 mod interface;
@@ -5,7 +7,10 @@ mod res;
 mod test;
 pub mod util;
 
+use std::fs;
+
 use dice::DEFAULT_SET;
+use game::content::{Cnt, dialogue};
 use interface::BattleInterface;
 use raylib::prelude::*;
 
@@ -14,6 +19,7 @@ fn main() -> eyre::Result<()> {
     let ra = RaylibAudio::init_audio_device()?;
 
     let res = res::load(&mut rl, &rt, &ra)?;
+    let cnt = Cnt::load(&res)?;
 
     let camera = Camera2D {
         target: Vector2::new(320.0 / 2.0, 240.0 / 2.0),
@@ -24,15 +30,24 @@ fn main() -> eyre::Result<()> {
 
     test::print_complete_statistics(&DEFAULT_SET);
 
-    let mut rng = rand::rng();
+    let rng = rand::rng();
 
-    let mut interface: BattleInterface = BattleInterface::new(0.0);
+    let interface: BattleInterface = BattleInterface::new(0.0, cnt);
     let mut frame_count = 0;
 
     let mut music = res.load_mus("battle", &ra);
     music.set_volume(0.0);
     music.play_stream();
     music.looping = true;
+
+    let lines = fs::read_to_string("cnt/dialog.dia")
+        .expect("could not read dialog file")
+        .lines()
+        .map(dialogue::Line::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut index = 0;
+    let mut start = Some(0.0);
 
     while !rl.window_should_close() {
         let mut d = rl.begin_drawing(&rt);
@@ -41,42 +56,60 @@ fn main() -> eyre::Result<()> {
 
         let time = d.get_time();
 
-        interface.update(&d, &res, &mut rng, time);
+        // interface.update(&d, &res, &mut rng, time);
 
         let mut dd = d.begin_mode2D(camera);
+        dd.clear_background(Color::BLACK);
 
-        dd.clear_background(Color::WHITE);
+        /*
+        if let Some(line) = lines.get(index) {
+            let finished_line = line.draw(
+                &mut dd,
+                &res,
+                res.fnt("default"),
+                time,
+                start.map(|s| time - s),
+            );
+            if finished_line && dd.is_key_pressed(KeyboardKey::KEY_Z) {
+                index += 1;
+                start = Some(time);
+            }
+            if dd.is_key_pressed(KeyboardKey::KEY_X) {
+                start = None;
+            }
+        }
+        */
 
-        let battle_background_ocean = res.tex("battle_background_ocean");
+        /*
 
-        let mut battle_background_shader = res.sha("battle_background").borrow_mut();
-        let time_loc = battle_background_shader.get_shader_location("time");
-        battle_background_shader.set_shader_value(time_loc, dd.get_time() as f32);
 
-        let mut sm = dd.begin_shader_mode(&mut battle_background_shader);
+                let battle_background_ocean = res.tex("battle_background_ocean");
 
-        sm.draw_texture_pro(
-            battle_background_ocean,
-            Rectangle::new(
-                0.0,
-                0.0,
-                battle_background_ocean.width as f32,
-                battle_background_ocean.height as f32,
-            ),
-            Rectangle::new(0.0, 0.0, 1280.0, 960.0),
-            Vector2::zero(),
-            0.0,
-            Color::WHITE,
-        );
-        drop(sm);
+                let mut battle_background_shader = res.sha("battle_background").borrow_mut();
+                let time_loc = battle_background_shader.get_shader_location("time");
+                battle_background_shader.set_shader_value(time_loc, dd.get_time() as f32);
 
-        interface.draw(&mut dd, &res, time, frame_count, &mut rng);
+                let mut sm = dd.begin_shader_mode(&mut battle_background_shader);
+
+                sm.draw_texture_pro(
+                    battle_background_ocean,
+                    Rectangle::new(
+                        0.0,
+                        0.0,
+                        battle_background_ocean.width as f32,
+                        battle_background_ocean.height as f32,
+                    ),
+                    Rectangle::new(0.0, 0.0, 1280.0, 960.0),
+                    Vector2::zero(),
+                    0.0,
+                    Color::WHITE,
+                );
+                drop(sm);
+
+                interface.draw(&mut dd, &res, time, frame_count, &mut rng);
+        */
 
         frame_count += 1;
-    }
-
-    if ra.is_audio_device_ready() {
-        println!("ts audio device is ready!");
     }
 
     Ok(())

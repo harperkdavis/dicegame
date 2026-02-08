@@ -1,0 +1,15 @@
+name = "FleshThing"
+sprite = "enemy"
+
+health = 0
+attack = 10
+defense = 0
+
+[[drops]]
+weight = 1
+value = 50
+
+[[drops]]
+item = "steak_dinner"
+weight = 2
+value = 100

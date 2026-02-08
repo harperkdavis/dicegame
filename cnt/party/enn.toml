@@ -1,0 +1,6 @@
+name = "Enn"
+
+sprite = "girl2"
+sprite_battle = "girl_torso"
+
+health = 100

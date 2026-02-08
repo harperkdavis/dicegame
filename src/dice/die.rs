@@ -2,7 +2,7 @@ use rand::Rng;
 use raylib::math::Rectangle;
 
 #[repr(u8)]
-#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, strum::EnumString)]
 pub enum Face {
     #[default]
     Blank,

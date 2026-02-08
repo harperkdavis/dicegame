@@ -1,0 +1,10 @@
+# Set room name
+room = "home"
+
+[layout]
+width = 16
+height = 16
+
+[layout.transitions]
+
+[dialogue]

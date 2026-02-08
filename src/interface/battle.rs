@@ -4,7 +4,11 @@ use rand::Rng;
 use raylib::prelude::*;
 
 use crate::{
-    game::{Action, Battle, enemy::FLESHTHING, party::ENN},
+    dice::DEFAULT_SET,
+    game::{
+        battle::{Action, Battle},
+        content::Cnt,
+    },
     res::Res,
     util::lerp,
 };
@@ -34,8 +38,8 @@ const ENEMY_X: i32 = 450;
 const ENEMY_Y: i32 = 200;
 
 impl BattleInterface {
-    pub fn new(time: f64) -> Self {
-        let battle = Battle::versus(&ENN, &FLESHTHING);
+    pub fn new(time: f64, cnt: Cnt) -> Self {
+        let battle = Battle::versus(&cnt.party["enn"], &cnt.enemies["fleshthing"]);
         let party_count = battle.party().len();
         let enemy_count = battle.enemies().len();
 
@@ -190,7 +194,7 @@ impl BattleInterface {
                     } else {
                         self.attack = Some(AttackInterface::new_round(
                             res,
-                            self.battle.party()[*party_member].info().default_dice_set,
+                            DEFAULT_SET,
                             rng,
                             time,
                             Vector2::new(ENEMY_X as f32 - 10.0, ENEMY_Y as f32 - 30.0),
@@ -220,7 +224,7 @@ impl BattleInterface {
         let font = res.fnt("default");
         // draw actual battle
         for (i, enemy) in self.battle.enemies().iter().enumerate() {
-            let sprite = res.tex(enemy.info().sprite);
+            let sprite = res.tex(enemy.info().sprite.as_str());
             if let Some((start, damage)) = self.anim_enemy_damage[i] {
                 let anim = 0.5_f32.powf((time - start) as f32 * 4.0);
                 if damage == 0 {
@@ -271,7 +275,7 @@ impl BattleInterface {
         d.draw_texture(res.tex("girl2"), 100, 300, Color::WHITE);
 
         for (i, member) in self.battle.party().iter().enumerate() {
-            let sprite = res.tex(member.info().sprite);
+            let sprite = res.tex(member.info().sprite.as_str());
             let anim = self.anim_actions_menu[i];
             let anim_y = (anim * 80.0).round() as i32;
             let x_offset = (i * 160) as i32;
