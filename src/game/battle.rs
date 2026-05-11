@@ -66,6 +66,12 @@ pub struct Battle {
     is_player_turn: bool,
 }
 
+pub struct DamageEvent {
+    pub from: usize,
+    pub to: usize,
+    pub amount: u32,
+}
+
 impl Battle {
     pub fn versus(party: &'static PartyDef, enemy: &'static EnemyDef) -> Self {
         Self {
@@ -117,15 +123,32 @@ impl Battle {
         self.enemies[index].health = self.enemies[index].health.saturating_sub(damage);
     }
 
-    pub fn run_enemy_turn(&mut self, rng: &mut impl Rng) -> Vec<(usize, u32)> {
+    pub fn battle_result(&self) -> Option<bool> {
+        if self.enemies.iter().all(|e| e.health == 0) {
+            Some(true)
+        } else if self.party.iter().all(|e| e.health == 0) {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    pub fn run_enemy_turn(&mut self, rng: &mut impl Rng) -> Vec<DamageEvent> {
         let mut damage = Vec::new();
 
-        for enemy in &self.enemies {
+        for (from, enemy) in self.enemies.iter().enumerate() {
+            if enemy.health() == 0 {
+                continue;
+            }
             let target = rng.random_range(0..self.party.len());
             let damage_dealt =
                 (enemy.info.attack as f64 * rng.random_range(0.9..1.1)).round() as u32;
 
-            damage.push((target, damage_dealt));
+            damage.push(DamageEvent {
+                from,
+                to: target,
+                amount: damage_dealt,
+            });
             self.party[target].health = self.party[target].health.saturating_sub(damage_dealt);
         }
 

@@ -1,6 +1,10 @@
-use std::f64;
+use std::{f64, fmt};
 
 use raylib::prelude::*;
+use serde::{
+    Deserialize,
+    de::{self, Visitor},
+};
 
 use crate::res::Res;
 
@@ -24,7 +28,7 @@ fn parse_spans(str: &str) -> eyre::Result<Vec<Span>> {
     let mut current_style = None;
 
     while end < str.len() {
-        if &str[end..=end] == "\\" {
+        if &str[end..=end] == "/" {
             spans.push(Span {
                 text: str[start..end].to_string(),
                 style: current_style,
@@ -44,7 +48,7 @@ fn parse_spans(str: &str) -> eyre::Result<Vec<Span>> {
                         "&" => Style::Group,
                         _ => {
                             return Err(eyre::eyre!(
-                                "invalid style identifier: \\{}",
+                                "invalid style identifier: /{}",
                                 &str[end..=end]
                             ));
                         }
@@ -61,7 +65,6 @@ fn parse_spans(str: &str) -> eyre::Result<Vec<Span>> {
         style: current_style,
     });
 
-    println!("{spans:?}");
     Ok(spans)
 }
 
@@ -83,8 +86,6 @@ fn find_breaks(full_text: &str, max_width: usize) -> Vec<usize> {
         current += word.len() + 1;
     }
 
-    println!("{breaks:?}");
-
     breaks
 }
 
@@ -97,15 +98,21 @@ fn get_line(breaks: &[usize], index: usize) -> usize {
         .unwrap_or(0)
 }
 
-#[derive(Default)]
+#[derive(Default, Deserialize)]
 pub struct Meta {
     speaker: Option<String>,
+    face: Option<String>,
 }
 
 impl TryFrom<&str> for Meta {
     type Error = eyre::Report;
-    fn try_from(_: &str) -> eyre::Result<Self> {
-        Ok(Self::default())
+    fn try_from(value: &str) -> eyre::Result<Self> {
+        Meta::deserialize(
+            value
+                .parse::<toml::Table>()
+                .map_err(|e| eyre::eyre!("failed to parse toml table: {e}"))?,
+        )
+        .map_err(|e| eyre::eyre!("invalid metadata: {e}"))
     }
 }
 
@@ -178,8 +185,8 @@ impl Line {
         dialogue_elapsed: f64,
         line_elapsed: Option<f64>,
     ) -> bool {
-        let anim_dialogue = 0.5_f64.powf(dialogue_elapsed * 8.0) * 160.0;
-        let anim_line = line_elapsed.map_or(0.0, |elapsed| 0.5_f64.powf(elapsed * 8.0)) * -4.0;
+        let anim_dialogue = 0.5_f64.powf(dialogue_elapsed * 16.0) * 160.0;
+        let anim_line = line_elapsed.map_or(0.0, |elapsed| 0.5_f64.powf(elapsed * 16.0)) * -4.0;
         let anim_y = (anim_dialogue + anim_line) as i32;
 
         d.draw_rectangle(79, 349 + anim_y, 442, 122, Color::WHITE);
@@ -189,8 +196,8 @@ impl Line {
         let mut drew_all = true;
 
         for c in self.characters() {
-            if let Some(elapsed) = line_elapsed {
-                if reveal > elapsed {
+            if let Some(elapsed) = line_elapsed
+                && reveal > elapsed {
                     if reveal < elapsed + d.get_frame_time() as f64 && !c.character.is_whitespace()
                     {
                         res.snd("dialogue").play();
@@ -198,7 +205,6 @@ impl Line {
                     drew_all = false;
                     break;
                 }
-            }
             reveal += c.delay_time();
 
             d.draw_text_ex(
@@ -227,10 +233,10 @@ impl TryFrom<&str> for Line {
     fn try_from(value: &str) -> eyre::Result<Self> {
         // Standardize whitespace
         let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
-        let (meta, spans) = if value.starts_with("[") {
+        let (meta, spans) = if value.starts_with("{") {
             let (meta, content) = value
-                .split_once(']')
-                .ok_or_else(|| eyre::eyre!("failed to parse metadata: unclosed [: {value:?}"))?;
+                .rsplit_once('}')
+                .ok_or_else(|| eyre::eyre!("failed to parse metadata: unclosed {{: {value:?}"))?;
             let meta = &meta[1..];
             (Meta::try_from(meta.trim())?, parse_spans(content.trim())?)
         } else {
@@ -251,4 +257,54 @@ impl TryFrom<&str> for Line {
             breaks,
         })
     }
+}
+
+pub struct Sequence(pub Vec<Line>);
+
+impl<'de> Deserialize<'de> for Sequence {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SeqVisitor;
+
+        impl<'de> Visitor<'de> for SeqVisitor {
+            type Value = Sequence;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a dialogue string or multiline dialogue block")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Sequence, E>
+            where
+                E: de::Error,
+            {
+                parse_sequence(v).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Sequence, E>
+            where
+                E: de::Error,
+            {
+                parse_sequence(&v).map_err(E::custom)
+            }
+        }
+
+        deserializer.deserialize_any(SeqVisitor)
+    }
+}
+
+fn parse_sequence(s: &str) -> eyre::Result<Sequence> {
+    let mut lines = Vec::new();
+
+    for raw in s.lines() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        lines.push(Line::try_from(line)?);
+    }
+
+    Ok(Sequence(lines))
 }

@@ -8,6 +8,7 @@ use std::{
 };
 
 use flags::FlagsDef;
+use room::Room;
 use rust_embed::Embed;
 use smartstring::{LazyCompact, SmartString};
 
@@ -94,6 +95,7 @@ pub struct Cnt {
     pub items: &'static Library<ItemDef>,
     pub party: &'static Library<PartyDef>,
     pub enemies: &'static Library<EnemyDef>,
+    pub rooms: &'static Library<Room>,
 }
 
 impl Cnt {
@@ -110,12 +112,16 @@ impl Cnt {
             Library::load(items, res)
                 .map_err(|e| eyre::eyre!("failed to load all enemies: {e}"))?,
         ));
+        let rooms: &'static _ = Box::leak(Box::new(
+            Library::load((), res).map_err(|e| eyre::eyre!("failed to load all rooms: {e}"))?,
+        ));
 
         Ok(Self {
             flags,
             items,
             party,
             enemies,
+            rooms,
         })
     }
 }

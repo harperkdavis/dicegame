@@ -915,8 +915,8 @@ impl AttackInterface {
             }
         }
 
-        if let Some(turn_end_elapsed) = turn_end_elapsed {
-            if let Some(pointer) = self.turn.pointer {
+        if let Some(turn_end_elapsed) = turn_end_elapsed
+            && let Some(pointer) = self.turn.pointer {
                 let anim_in =
                     0.5_f32.powf(turn_end_elapsed as f32 * 8.0) + out_anim.min(1.0) as f32;
 
@@ -990,7 +990,6 @@ impl AttackInterface {
                     );
                 }
             }
-        }
     }
 
     pub fn damage_apply_time(&self) -> Option<f64> {

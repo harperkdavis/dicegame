@@ -10,6 +10,6 @@ raylib = "5.5.1"
 rust-embed = { version = "8.11.0", features = ["compression", "include-exclude"] }
 serde = { version = "1.0.228", features = ["derive"] }
 shuffle = "0.2.1"
-smartstring = "1.0.1"
+smartstring = { version = "1.0.1", features = ["serde"] }
 strum = { version = "0.27.2", features = ["derive"] }
 toml = { version = "0.9.11", features = ["serde"] }

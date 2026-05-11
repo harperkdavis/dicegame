@@ -2,26 +2,37 @@
 
 mod dice;
 mod game;
-mod interface;
+pub mod interface;
 mod res;
 mod test;
 pub mod util;
 
-use std::fs;
-
 use dice::DEFAULT_SET;
-use game::content::{Cnt, dialogue};
-use interface::BattleInterface;
+use game::content::{Cnt, dialogue::Sequence};
 use raylib::prelude::*;
 
+use crate::game::state::{self, TICK_RATE};
+
+struct SequenceState {
+    seq: &'static Sequence,
+    index: usize,
+    seq_start: f64,
+    line_start: Option<f64>,
+}
+
 fn main() -> eyre::Result<()> {
-    let (mut rl, rt) = raylib::init().size(1280, 960).title("Hello, World").build();
+    let (mut rl, rt) = raylib::init()
+        .size(1280, 960)
+        .title("Level of Conflict")
+        .build();
     let ra = RaylibAudio::init_audio_device()?;
 
     let res = res::load(&mut rl, &rt, &ra)?;
     let cnt = Cnt::load(&res)?;
 
-    let camera = Camera2D {
+    let (mut long, mut short) = state::load_file(&res, cnt, &ra)?;
+
+    let screen_camera = Camera2D {
         target: Vector2::new(320.0 / 2.0, 240.0 / 2.0),
         offset: Vector2::new(320.0, 240.0),
         zoom: 2.0,
@@ -30,84 +41,25 @@ fn main() -> eyre::Result<()> {
 
     test::print_complete_statistics(&DEFAULT_SET);
 
-    let rng = rand::rng();
-
-    let interface: BattleInterface = BattleInterface::new(0.0, cnt);
     let mut frame_count = 0;
-
-    let mut music = res.load_mus("battle", &ra);
-    music.set_volume(0.0);
-    music.play_stream();
-    music.looping = true;
-
-    let lines = fs::read_to_string("cnt/dialog.dia")
-        .expect("could not read dialog file")
-        .lines()
-        .map(dialogue::Line::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut index = 0;
-    let mut start = Some(0.0);
+    let mut acc = 0.0;
 
     while !rl.window_should_close() {
         let mut d = rl.begin_drawing(&rt);
 
-        music.update_stream();
+        acc += d.get_frame_time() * TICK_RATE as f32;
+        acc = acc.min(10.0);
+        while acc >= 1.0 {
+            state::tick(&d, &mut long, &mut short, &res, cnt);
+            acc -= 1.0;
+        }
 
-        let time = d.get_time();
+        state::update(&d, &mut long, &mut short, &res, cnt);
 
-        // interface.update(&d, &res, &mut rng, time);
-
-        let mut dd = d.begin_mode2D(camera);
+        let mut dd = d.begin_mode2D(screen_camera);
         dd.clear_background(Color::BLACK);
 
-        /*
-        if let Some(line) = lines.get(index) {
-            let finished_line = line.draw(
-                &mut dd,
-                &res,
-                res.fnt("default"),
-                time,
-                start.map(|s| time - s),
-            );
-            if finished_line && dd.is_key_pressed(KeyboardKey::KEY_Z) {
-                index += 1;
-                start = Some(time);
-            }
-            if dd.is_key_pressed(KeyboardKey::KEY_X) {
-                start = None;
-            }
-        }
-        */
-
-        /*
-
-
-                let battle_background_ocean = res.tex("battle_background_ocean");
-
-                let mut battle_background_shader = res.sha("battle_background").borrow_mut();
-                let time_loc = battle_background_shader.get_shader_location("time");
-                battle_background_shader.set_shader_value(time_loc, dd.get_time() as f32);
-
-                let mut sm = dd.begin_shader_mode(&mut battle_background_shader);
-
-                sm.draw_texture_pro(
-                    battle_background_ocean,
-                    Rectangle::new(
-                        0.0,
-                        0.0,
-                        battle_background_ocean.width as f32,
-                        battle_background_ocean.height as f32,
-                    ),
-                    Rectangle::new(0.0, 0.0, 1280.0, 960.0),
-                    Vector2::zero(),
-                    0.0,
-                    Color::WHITE,
-                );
-                drop(sm);
-
-                interface.draw(&mut dd, &res, time, frame_count, &mut rng);
-        */
+        state::draw(&mut dd, &long, &mut short, &res, cnt, frame_count);
 
         frame_count += 1;
     }
