@@ -1,4 +1,10 @@
-use crate::dice::{DICE_COUNT, DiceSet, DiceState, MoveType};
+use crate::{
+    dice::{DICE_COUNT, DiceSet, DiceState, MoveType},
+    game::{
+        battle::{Action, Battle, PartyDef},
+        content::Cnt,
+    },
+};
 
 pub fn print_complete_statistics(dice_set: &DiceSet) {
     println!("STATISTICS FOR DICE:");
@@ -45,5 +51,48 @@ pub fn print_complete_statistics(dice_set: &DiceSet) {
     println!(
         "AVERAGE SCORE: {:.2}",
         total_score as f64 / TOTAL_COMBINATIONS as f64
+    );
+}
+
+pub fn health_damage_reduction(cnt: Cnt) {
+    let mut rng = rand::rng();
+    let mut turns_lasted_average = 0;
+
+    for _ in 0..1000 {
+        let mut battle = Battle::versus(&[&cnt.party["enn"]], &cnt.enemies["fleshthing"]);
+        while battle.battle_result().is_none() {
+            turns_lasted_average += 1;
+
+            battle.push_action(Action::Flee);
+            while battle.process_next_action().is_some() {}
+
+            battle.run_enemy_turn(&mut rng);
+            battle.finish_enemy_turn();
+        }
+    }
+
+    println!(
+        "AVERAGE TURNS LASTED (NO DEFENSE): {}",
+        turns_lasted_average as f64 / 1000.0
+    );
+
+    turns_lasted_average = 0;
+
+    for _ in 0..1000 {
+        let mut battle = Battle::versus(&[&cnt.party["enn"]], &cnt.enemies["fleshthing"]);
+        while battle.battle_result().is_none() {
+            turns_lasted_average += 1;
+
+            battle.push_action(Action::Defend);
+            while battle.process_next_action().is_some() {}
+
+            battle.run_enemy_turn(&mut rng);
+            battle.finish_enemy_turn();
+        }
+    }
+
+    println!(
+        "AVERAGE TURNS LASTED (WITH DEFENSE): {}",
+        turns_lasted_average as f64 / 1000.0
     );
 }

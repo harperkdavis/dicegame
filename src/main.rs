@@ -35,6 +35,7 @@ fn main() -> eyre::Result<()> {
     let mut render_texture = rl.load_render_texture(&rt, 640, 480)?;
 
     test::print_complete_statistics(&DEFAULT_SET);
+    test::health_damage_reduction(cnt);
 
     let mut frame_count = 0;
     let mut acc = 0.0;
