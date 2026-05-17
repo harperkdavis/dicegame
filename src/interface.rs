@@ -20,7 +20,7 @@ fn draw_die(
     squish: f32,
 ) {
     let border_tex = res.tex("dice_border");
-    let dice_tex = res.tex("dice_textured");
+    let dice_tex = res.tex("dice");
 
     dd.draw_texture_pro(
         border_tex,
@@ -48,4 +48,19 @@ fn draw_die(
         0.0,
         inner_tint,
     );
+}
+
+pub fn health_color(health: u32, max_health: u32, time: f64) -> Color {
+    let factor = health as f32 / max_health as f32;
+    if health == 0 {
+        Color::new(21, 21, 21, 255)
+    } else if health == 1 {
+        if time % 0.5 < 0.25 {
+            Color::color_from_hsv(0.0, 1.0, 0.5)
+        } else {
+            Color::new(21, 21, 21, 255)
+        }
+    } else {
+        Color::color_from_hsv(0.0, 1.0 - factor, 0.5 + factor * 0.5)
+    }
 }

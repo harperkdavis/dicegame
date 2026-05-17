@@ -3,4 +3,6 @@ name = "Enn"
 sprite = "girl2"
 sprite_battle = "girl_torso"
 
-health = 100
+pronoun_personal = "she"
+pronoun_possessive = "her"
+pronoun_reflexive = "herself"

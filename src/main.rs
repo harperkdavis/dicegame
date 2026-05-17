@@ -32,12 +32,7 @@ fn main() -> eyre::Result<()> {
 
     let (mut long, mut short) = state::load_file(&res, cnt, &ra)?;
 
-    let screen_camera = Camera2D {
-        target: Vector2::new(320.0 / 2.0, 240.0 / 2.0),
-        offset: Vector2::new(320.0, 240.0),
-        zoom: 2.0,
-        rotation: 0.0,
-    };
+    let mut render_texture = rl.load_render_texture(&rt, 640, 480)?;
 
     test::print_complete_statistics(&DEFAULT_SET);
 
@@ -54,12 +49,34 @@ fn main() -> eyre::Result<()> {
             acc -= 1.0;
         }
 
+        let time = d.get_time();
         state::update(&d, &mut long, &mut short, &res, cnt);
 
-        let mut dd = d.begin_mode2D(screen_camera);
+        let mut dd = d.begin_texture_mode(&rt, &mut render_texture);
         dd.clear_background(Color::BLACK);
 
-        state::draw(&mut dd, &long, &mut short, &res, cnt, frame_count);
+        state::draw(&mut dd, &long, &mut short, &res, cnt, time, frame_count);
+
+        drop(dd);
+
+        d.clear_background(Color::BLACK);
+
+        let proposed_height = d.get_screen_height();
+        let proposed_width = proposed_height * 4 / 3;
+        let x_offset = d.get_screen_width() / 2 - proposed_width / 2;
+        d.draw_texture_pro(
+            &render_texture,
+            Rectangle::new(0.0, 480.0, 640.0, -480.0),
+            Rectangle::new(
+                x_offset as f32,
+                0.0,
+                proposed_width as f32,
+                proposed_height as f32,
+            ),
+            Vector2::zero(),
+            0.0,
+            Color::WHITE,
+        );
 
         frame_count += 1;
     }

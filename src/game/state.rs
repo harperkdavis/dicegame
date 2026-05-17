@@ -193,15 +193,15 @@ pub fn update(d: &RaylibDrawHandle, _long: &mut Long, short: &mut Short, res: &R
 }
 
 pub fn draw(
-    d: &mut RaylibMode2D<RaylibDrawHandle>,
+    d: &mut impl RaylibDraw,
     long: &Long,
     short: &mut Short,
     res: &Res,
     cnt: Cnt,
+    time: f64,
     frame_count: usize,
 ) {
     let mut rng = rand::rng();
-    let time = d.get_time();
     let room = &cnt.rooms[&long.room];
 
     if let Some(bi) = short.battle.as_mut() {

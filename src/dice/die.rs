@@ -18,12 +18,13 @@ pub enum Face {
 impl Face {
     const fn texture_index(&self) -> usize {
         match self {
-            Self::Blank | Self::TenPoints => 0,
-            Self::Two => 2,
-            Self::Three | Self::WildSun => 3,
-            Self::Four => 4,
-            Self::FivePoints => 1,
-            Self::Six => 5,
+            Self::Blank => 0,
+            Self::TenPoints => 1,
+            Self::Two => 3,
+            Self::Three | Self::WildSun => 4,
+            Self::Four => 5,
+            Self::FivePoints => 2,
+            Self::Six => 6,
         }
     }
 
@@ -68,8 +69,14 @@ impl Face {
         matches!(self, Self::WildSun)
     }
 
+    pub const fn is_inactive(&self) -> bool {
+        matches!(self, Self::Blank)
+    }
+
     pub fn matches(&self, other: &Self) -> bool {
-        self.is_wild() || other.is_wild() || self == other
+        !self.is_inactive()
+            && !other.is_inactive()
+            && (self.is_wild() || other.is_wild() || self == other)
     }
 }
 

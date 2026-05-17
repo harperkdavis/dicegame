@@ -6,8 +6,12 @@ use crate::{
         DICE_COUNT, DiceSet, DiceState, Indices, MoveResult, MoveType, boolset_to_indices,
         result_rectangles,
     },
+    game::battle::{
+        Health,
+        health::{self, MAX_HEALTH_VALUES},
+    },
     res::Res,
-    util::lerp,
+    util::{TextOutline, lerp},
 };
 
 use super::draw_die;
@@ -61,6 +65,7 @@ enum MoveButton {
 
 struct AttackState {
     dice_set: DiceSet,
+    health: Health,
 
     dice_state: DiceState,
     move_result: MoveResult,
@@ -74,8 +79,8 @@ struct AttackState {
 }
 
 impl AttackState {
-    pub fn new_round(dice_set: DiceSet, rng: &mut impl Rng) -> Self {
-        let dice_state = DiceState::random(&dice_set, rng);
+    pub fn new_round(dice_set: DiceSet, rng: &mut impl Rng, health: Health) -> Self {
+        let dice_state = DiceState::random(&dice_set, rng, health.active());
         let move_result = dice_state.result();
         let selected = Vec::new();
         let rerollable = move_result.rerollable_dice(&selected);
@@ -96,6 +101,7 @@ impl AttackState {
 
         Self {
             dice_set,
+            health,
             dice_state,
             move_result,
             rerollable,
@@ -261,7 +267,7 @@ impl AttackState {
     }
 
     pub fn another(&mut self, rng: &mut impl Rng) {
-        let mut new = Self::new_round(self.dice_set, rng);
+        let mut new = Self::new_round(self.dice_set, rng, self.health);
         new.score_banked = self.current_score();
         *self = new;
     }
@@ -305,10 +311,16 @@ pub struct AttackInterface {
 }
 
 impl AttackInterface {
-    fn new(dice_set: DiceSet, rng: &mut impl Rng, time: f64, target_pos: Vector2) -> Self {
+    fn new(
+        dice_set: DiceSet,
+        rng: &mut impl Rng,
+        health: Health,
+        time: f64,
+        target_pos: Vector2,
+    ) -> Self {
         Self {
             dice_set,
-            turn: AttackState::new_round(dice_set, rng),
+            turn: AttackState::new_round(dice_set, rng, health),
 
             round_start: time,
             round_end: None,
@@ -347,14 +359,18 @@ impl AttackInterface {
         res: &Res,
         dice_set: DiceSet,
         rng: &mut impl Rng,
+        health: Health,
         time: f64,
         target_pos: Vector2,
     ) -> Self {
-        let mut new = Self::new(dice_set, rng, time, target_pos);
+        let mut new = Self::new(dice_set, rng, health, time, target_pos);
         new.set_rolling_animation_state(
             0,
             (time * 2.0).ceil() / 2.0,
-            (0..DICE_COUNT).rev().collect(),
+            (0..DICE_COUNT)
+                .rev()
+                .filter(|i| health.active()[*i])
+                .collect(),
         );
 
         res.snd("roll_short").play();
@@ -663,7 +679,10 @@ impl AttackInterface {
                             self.set_rolling_animation_state(
                                 prev_score,
                                 (time * 2.0).ceil() / 2.0,
-                                (0..DICE_COUNT).rev().collect(),
+                                (0..DICE_COUNT)
+                                    .filter(|i| self.turn.health.active()[*i])
+                                    .rev()
+                                    .collect(),
                             );
                         }
                         MoveButton::Reroll(t) if t => {
@@ -747,6 +766,41 @@ impl AttackInterface {
             .into_iter()
             .enumerate()
         {
+            let slot_health = self.turn.health[i];
+            let is_die_dead = slot_health == 0;
+            let slot_max_health = MAX_HEALTH_VALUES[i];
+            let factor = if slot_health == 1 {
+                1.0
+            } else {
+                slot_health as f32 / slot_max_health as f32
+            };
+
+            d.draw_rectangle(
+                84 + i as i32 * 50 - (factor * 20.0) as i32,
+                9 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                (factor * 40.0) as i32,
+                2,
+                super::health_color(slot_health, slot_max_health, time),
+            );
+
+            if is_die_dead {
+                d.draw_line(
+                    84 + i as i32 * 50 - 20,
+                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    84 + i as i32 * 50 + 20,
+                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    Color::RED,
+                );
+                d.draw_line(
+                    84 + i as i32 * 50 + 20,
+                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    84 + i as i32 * 50 - 20,
+                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    Color::RED,
+                );
+                continue;
+            }
+
             if self.anim_rolling.contains(&i) {
                 draw_die(
                     d,
@@ -904,99 +958,99 @@ impl AttackInterface {
                 let y = y + turn_end_elapsed
                     .map_or(0.0, |t| 1.0 - ((t - 1.0).max(0.0).powi(2)) * 40.0)
                     - out_anim * 40.0;
-                d.draw_text_ex(
+                d.draw_text_outline(
                     font,
                     &format!("+{plus_score}"),
-                    Vector2::new(x as f32, y.round() as f32),
-                    16.0,
-                    1.0,
+                    x as f32,
+                    y.round() as f32,
                     Color::WHITE,
+                    Color::BLACK,
                 );
             }
         }
 
         if let Some(turn_end_elapsed) = turn_end_elapsed
-            && let Some(pointer) = self.turn.pointer {
-                let anim_in =
-                    0.5_f32.powf(turn_end_elapsed as f32 * 8.0) + out_anim.min(1.0) as f32;
+            && let Some(pointer) = self.turn.pointer
+        {
+            let anim_in = 0.5_f32.powf(turn_end_elapsed as f32 * 8.0) + out_anim.min(1.0) as f32;
 
-                fn get_menu_x(i: usize) -> f32 {
-                    if i == INDEX_BUTTON_FIRST {
-                        392.0
-                    } else if i == INDEX_BUTTON_SECOND {
-                        462.0
-                    } else {
-                        84.0 + (50 * i) as f32
-                    }
+            fn get_menu_x(i: usize) -> f32 {
+                if i == INDEX_BUTTON_FIRST {
+                    392.0
+                } else if i == INDEX_BUTTON_SECOND {
+                    462.0
+                } else {
+                    84.0 + (50 * i) as f32
                 }
+            }
 
-                let pointer_x = get_menu_x(pointer);
+            let pointer_x = get_menu_x(pointer);
 
-                if out_anim < 0.2 {
-                    for i in &self.turn.menu {
-                        d.draw_texture(
-                            res.tex("hand"),
-                            get_menu_x(*i) as i32 - 16,
-                            82,
-                            Color::color_from_hsv(0.0, 0.0, f32::max(0.0, 0.2 - 0.2 * anim_in)),
-                        );
-                    }
-                }
-
-                let (first_button, can_attack) = self.turn.move_buttons().unwrap();
-                let (first_tex_y, first_enabled) = match first_button {
-                    MoveButton::Reroll(e) => (64.0, e),
-                    MoveButton::Another => (32.0, true),
-                };
-
-                d.draw_texture_rec(
-                    res.tex("battle_buttons"),
-                    Rectangle::new(0.0, first_tex_y, 64.0, 32.0),
-                    Vector2::new(
-                        360.0,
-                        40.0 + f32::sin(time as f32 * 2.0) * 3.0 - anim_in * 100.0,
-                    ),
-                    if first_enabled {
-                        Color::WHITE
-                    } else {
-                        Color::new(255, 255, 255, 127)
-                    },
-                );
-
-                d.draw_texture_rec(
-                    res.tex("battle_buttons"),
-                    Rectangle::new(0.0, 0.0, 64.0, 32.0),
-                    Vector2::new(
-                        430.0,
-                        40.0 + f32::cos(time as f32 * 2.0) * 3.0 - anim_in * 200.0,
-                    ),
-                    if can_attack {
-                        if time % 0.25 < 0.125 {
-                            Color::YELLOW
-                        } else {
-                            Color::WHITE
-                        }
-                    } else {
-                        Color::new(255, 255, 255, 127)
-                    },
-                );
-
-                if out_anim < 1.0 {
+            if out_anim < 0.2 {
+                for i in &self.turn.menu {
                     d.draw_texture(
                         res.tex("hand"),
-                        pointer_x as i32 - 16,
+                        get_menu_x(*i) as i32 - 16,
                         82,
-                        Color::color_from_hsv(0.0, 0.0, 1.0 - anim_in),
+                        Color::color_from_hsv(0.0, 0.0, f32::max(0.0, 0.2 - 0.2 * anim_in)),
                     );
                 }
             }
+
+            let (first_button, can_attack) = self.turn.move_buttons().unwrap();
+            let (first_tex_y, first_enabled) = match first_button {
+                MoveButton::Reroll(e) => (64.0, e),
+                MoveButton::Another => (32.0, true),
+            };
+
+            d.draw_texture_rec(
+                res.tex("battle_buttons"),
+                Rectangle::new(0.0, first_tex_y, 64.0, 32.0),
+                Vector2::new(
+                    360.0,
+                    40.0 + f32::sin(time as f32 * 2.0) * 3.0 - anim_in * 100.0,
+                ),
+                if first_enabled {
+                    Color::WHITE
+                } else {
+                    Color::new(255, 255, 255, 127)
+                },
+            );
+
+            d.draw_texture_rec(
+                res.tex("battle_buttons"),
+                Rectangle::new(0.0, 0.0, 64.0, 32.0),
+                Vector2::new(
+                    430.0,
+                    40.0 + f32::cos(time as f32 * 2.0) * 3.0 - anim_in * 200.0,
+                ),
+                if can_attack {
+                    if time % 0.25 < 0.125 {
+                        Color::YELLOW
+                    } else {
+                        Color::WHITE
+                    }
+                } else {
+                    Color::new(255, 255, 255, 127)
+                },
+            );
+
+            if out_anim < 1.0 {
+                d.draw_texture(
+                    res.tex("hand"),
+                    pointer_x as i32 - 16,
+                    82,
+                    Color::color_from_hsv(0.0, 0.0, 1.0 - anim_in),
+                );
+            }
+        }
     }
 
     pub fn damage_apply_time(&self) -> Option<f64> {
         self.round_end.map(|e| e + 0.5)
     }
 
-    pub fn can_advance(&self, time: f64) -> bool {
-        self.round_end.is_some_and(|e| time > e + 2.0)
+    pub fn can_advance(&self, time: f64, skip: bool) -> bool {
+        self.round_end.is_some_and(|e| skip || time > e + 2.0)
     }
 }

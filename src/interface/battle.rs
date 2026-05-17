@@ -6,11 +6,14 @@ use raylib::prelude::*;
 use crate::{
     dice::DEFAULT_SET,
     game::{
-        battle::{Action, Battle, DamageEvent},
+        battle::{
+            Action, Battle, DamageEvent,
+            health::{self, HEAD_INDEX, LIMBS, MAX_HEAD_HEALTH, MAX_HEALTH_VALUES},
+        },
         content::Cnt,
     },
     res::Res,
-    util::{lerp, smooth_min},
+    util::{TextOutline, lerp, smooth_min},
 };
 
 use super::AttackInterface;
@@ -35,9 +38,11 @@ pub struct BattleInterface {
     is_enemy_turn: bool,
 
     anim_actions_menu: Box<[f64]>,
+    anim_actions_hover: [f32; 4],
     anim_enemy_damage: Box<[Option<(f64, u32)>]>,
     anim_enemy_death: Box<[Option<f64>]>,
     anim_party_damage: Box<[Option<(f64, u32)>]>,
+    anim_party_death: Box<[Option<f64>]>,
 
     anim_last_damage: f64,
     anim_party_damage_queue: Vec<DamageEvent>,
@@ -49,7 +54,10 @@ const TWO_BAR_DURATION: f64 = 60.0 / 160.0 * 7.0;
 
 impl BattleInterface {
     pub fn new(time: f64, cnt: Cnt) -> Self {
-        let battle = Battle::versus(&cnt.party["enn"], &cnt.enemies["fleshthing"]);
+        let battle = Battle::versus(
+            &[&cnt.party["enn"], &cnt.party["kue"]],
+            &cnt.enemies["fleshthing"],
+        );
         let party_count = battle.party().len();
         let enemy_count = battle.enemies().len();
 
@@ -67,9 +75,11 @@ impl BattleInterface {
             is_enemy_turn: false,
 
             anim_actions_menu: iter::repeat_n(0.0, party_count).collect(),
+            anim_actions_hover: [0.0; 4],
             anim_enemy_damage: iter::repeat_n(None, enemy_count).collect(),
             anim_enemy_death: iter::repeat_n(None, enemy_count).collect(),
             anim_party_damage: iter::repeat_n(None, party_count).collect(),
+            anim_party_death: iter::repeat_n(None, party_count).collect(),
 
             anim_last_damage: 0.0,
             anim_party_damage_queue: Vec::new(),
@@ -80,6 +90,7 @@ impl BattleInterface {
         let party_count = self.battle.party().len();
         let enemy_count = self.battle.party().len();
         self.anim_actions_menu = iter::repeat_n(0.0, party_count).collect();
+        self.anim_actions_hover = [0.0; 4];
         self.anim_enemy_damage = iter::repeat_n(None, enemy_count).collect();
         self.anim_party_damage = iter::repeat_n(None, party_count).collect();
 
@@ -125,6 +136,13 @@ impl BattleInterface {
                 (0.2 * d.get_frame_time() * 60.0).clamp(0.0, 1.0) as f64,
             );
         }
+        for i in 0..4 {
+            self.anim_actions_hover[i] = lerp(
+                self.anim_actions_hover[i],
+                if self.action_select == i { 1.0 } else { 0.0 },
+                (0.2 * d.get_frame_time() * 60.0).clamp(0.0, 1.0),
+            )
+        }
 
         if self.battle.is_player_turn() {
             if let Some(enemy) = self.enemy_select.as_mut() {
@@ -151,6 +169,7 @@ impl BattleInterface {
                     res.snd("menu").play();
                 } else if d.is_key_pressed(KeyboardKey::KEY_Z) {
                     self.battle.push_action(Action::Attack(*enemy));
+                    self.anim_actions_hover = [0.0; 4];
                     res.snd("select").play();
                     self.enemy_select = None;
                 }
@@ -171,14 +190,19 @@ impl BattleInterface {
                         self.action_select += 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_Z) && self.action_select == 0 {
-                    res.snd("select").play();
-                    self.enemy_select = Some(0);
+                if d.is_key_pressed(KeyboardKey::KEY_Z) {
+                    if self.action_select == 0 {
+                        res.snd("select").play();
+                        self.enemy_select = Some(0);
+                    } else if self.action_select == 1 {
+                        res.snd("select").play();
+                        self.battle.push_action(Action::Defend);
+                    }
                 }
             }
         } else if self.is_enemy_turn {
             // enemy turn
-            if time > self.anim_last_damage + 1.0 {
+            if time > self.anim_last_damage + 1.0 || d.is_key_pressed(KeyboardKey::KEY_Z) {
                 self.anim_last_damage = time;
                 if let Some(DamageEvent { to, amount, .. }) = self.anim_party_damage_queue.pop() {
                     res.snd("party_hurt").set_pitch(rng.random_range(0.9..1.1));
@@ -198,7 +222,8 @@ impl BattleInterface {
                     }
                 }
             }
-        } else if let Some((action, _party_member)) = &self.current_action {
+        } else if let Some((action, party_member)) = &self.current_action {
+            let member = &self.battle.party()[*party_member];
             match action {
                 Action::Attack(target) => {
                     if let Some(damage) = &self.attack_result {
@@ -222,7 +247,7 @@ impl BattleInterface {
                             }
                         }
                         // after
-                        if attack.can_advance(time) {
+                        if attack.can_advance(time, d.is_key_pressed(KeyboardKey::KEY_Z)) {
                             self.attack = None;
                             self.attack_result = None;
                             self.current_action = None;
@@ -237,12 +262,15 @@ impl BattleInterface {
                             res,
                             DEFAULT_SET,
                             rng,
+                            *member.health(),
                             time,
                             Vector2::new(ENEMY_X as f32 - 10.0, ENEMY_Y as f32 - 30.0),
                         ));
                     }
                 }
-                _ => todo!(),
+                // TODO: add animations and sounds for others
+                Action::Defend => self.current_action = None,
+                Action::Flee => (),
             }
         } else if let Some(next_action) = self.battle.process_next_action() {
             self.current_action = Some(next_action);
@@ -354,7 +382,8 @@ impl BattleInterface {
 
         let anim_in_battle = f32::exp(((time - self.battle_start) * -4.0) as f32);
 
-        let font = res.fnt("unnamedfont");
+        let text_font = res.fnt("unnamedfont");
+        let numbers_font = res.fnt("execution");
         // draw actual battle
         for (i, enemy) in self.battle.enemies().iter().enumerate() {
             let sprite = res.tex(enemy.info().sprite.as_str());
@@ -398,20 +427,20 @@ impl BattleInterface {
                 && i == index
             {
                 d.draw_text_ex(
-                    font,
+                    text_font,
                     &enemy.info().name.to_uppercase(),
                     Vector2::new(ENEMY_X as f32, ENEMY_Y as f32),
                     16.0,
                     0.0,
                     Color::WHITE,
                 );
-                d.draw_text_ex(
-                    font,
-                    &format!("{} / {}", enemy.health(), enemy.info().health),
-                    Vector2::new(ENEMY_X as f32, ENEMY_Y as f32 + 20.0),
-                    16.0,
-                    0.0,
+                d.draw_text_outline(
+                    numbers_font,
+                    &format!("{}/{}", enemy.health(), enemy.info().health),
+                    ENEMY_X as f32,
+                    ENEMY_Y as f32 + 20.0,
                     Color::WHITE,
+                    Color::BLACK,
                 );
             }
         }
@@ -427,6 +456,8 @@ impl BattleInterface {
             let anim = self.anim_actions_menu[i];
             let anim_y = (anim * 80.0).round() as i32 - (anim_in_battle * 200.0) as i32;
             let x_offset = (i * 160) as i32;
+            let char_y = 470 - 128 - anim_y + (f64::sin(time * 2.0) * 4.0).round() as i32
+                - (anim * 10.0) as i32;
 
             if let Some((start, damage)) = self.anim_party_damage[i] {
                 let anim = 0.5_f32.powf((time - start) as f32 * 4.0);
@@ -434,77 +465,130 @@ impl BattleInterface {
                     d.draw_texture(
                         sprite,
                         20 + (rng.random_range(-4.0..4.0) * anim).round() as i32 + x_offset,
-                        480 - 128 - anim_y + (f64::sin(time * 2.0) * 4.0).round() as i32,
+                        char_y,
                         Color::new(255, 255, 255, 127),
                     );
 
-                    d.draw_text_ex(
-                        font,
+                    d.draw_text_outline(
+                        numbers_font,
                         "MISS",
-                        Vector2::new(50.0 + x_offset as f32, 480.0 - 128.0 + anim * 40.0),
-                        16.0,
-                        1.0,
+                        50.0 + x_offset as f32,
+                        480.0 - 128.0 + anim * 40.0,
                         Color::new(255, 255, 255, 127),
+                        Color::new(0, 0, 0, 31),
                     );
                 } else {
                     d.draw_texture(
                         sprite,
                         20 + (rng.random_range(-4.0..4.0) * anim).round() as i32 + x_offset,
-                        480 - 128 + (f64::sin(time * 2.0) * 4.0).round() as i32 - anim_y
-                            + (rng.random_range(-4.0..4.0) * anim).round() as i32,
+                        char_y + (rng.random_range(-4.0..4.0) * anim).round() as i32,
                         Color::color_from_hsv(0.0, anim * 0.5, 1.0),
                     );
 
-                    d.draw_text_ex(
-                        font,
+                    d.draw_text_outline(
+                        numbers_font,
                         &format!("-{damage}"),
-                        Vector2::new(50.0 + x_offset as f32, 480.0 - 128.0 + anim * 40.0),
-                        16.0,
-                        1.0,
+                        50.0 + x_offset as f32,
+                        480.0 - 128.0 + anim * 40.0,
                         Color::RED,
+                        Color::BLACK,
                     );
                 }
             } else {
+                d.draw_texture(sprite, 20 + x_offset, char_y, Color::WHITE);
+            }
+
+            d.draw_texture(
+                res.tex("ui_charactername"),
+                x_offset,
+                460 - anim_y,
+                Color::new(51, 51, 51, 255),
+            );
+
+            d.draw_text_outline(
+                text_font,
+                &member.info().name.to_uppercase(),
+                5.0 + x_offset as f32,
+                443.0 - anim_y as f32,
+                Color::WHITE,
+                Color::BLACK,
+            );
+
+            d.draw_texture(
+                res.tex("ui/body/default/base"),
+                x_offset + 115,
+                460 - anim_y,
+                Color::WHITE,
+            );
+
+            for (i, seg) in LIMBS.iter().enumerate() {
+                let health = member.health()[i];
+                let max_health = MAX_HEALTH_VALUES[i];
+                let limb_color = super::health_color(health, max_health, time);
                 d.draw_texture(
-                    sprite,
-                    20 + x_offset,
-                    480 - 128 + (f64::sin(time * 2.0) * 4.0).round() as i32 - anim_y,
-                    Color::WHITE,
+                    res.tex(format!("ui/body/default/{seg}").as_str()),
+                    x_offset + 115,
+                    460 - anim_y,
+                    limb_color,
                 );
             }
 
+            let text_health_color = Color::lerp(
+                &super::health_color(member.health()[HEAD_INDEX], MAX_HEAD_HEALTH, time),
+                Color::RED,
+                self.anim_party_damage[i]
+                    .map(|(t, d)| {
+                        if d > 0 {
+                            0.5_f32.powf((time - t) as f32 * 4.0)
+                        } else {
+                            0.0
+                        }
+                    })
+                    .unwrap_or_default(),
+            );
+
+            d.draw_text_outline(
+                numbers_font,
+                &member.total_health().to_string(),
+                x_offset as f32 + 4.0,
+                463.0 - anim_y as f32,
+                text_health_color,
+                Color::BLACK,
+            );
+
+            d.draw_text_outline(
+                res.fnt("execution_small"),
+                "/400",
+                x_offset as f32 + 35.0,
+                463.0 - anim_y as f32,
+                Color::WHITE,
+                Color::BLACK,
+            );
+
             d.draw_rectangle(x_offset, 480 - anim_y, 160, 80, Color::BLACK);
-
-            d.draw_text_ex(
-                font,
-                &member.info().name.to_uppercase(),
-                Vector2::new(5.0 + x_offset as f32, 463.0 - anim_y as f32),
-                16.0,
-                1.0,
-                Color::WHITE,
-            );
-
-            let health_display = format!("{} / {}", member.health(), member.info().health);
-            d.draw_text_ex(
-                font,
-                &health_display,
-                Vector2::new(
-                    160.0 - font.measure_text(&health_display, 16.0, 1.0).x + x_offset as f32,
-                    463.0 - anim_y as f32,
-                ),
-                16.0,
-                1.0,
-                Color::WHITE,
-            );
 
             let action_buttons = res.tex("battle_actions");
 
             for j in 0..4 {
                 d.draw_texture_rec(
                     action_buttons,
-                    Rectangle::new(0.0, 15.0 * j as f32, 100.0, 15.0),
+                    Rectangle::new(0.0, 15.0 * j as f32, 15.0, 15.0),
                     Vector2::new(
-                        30.0 + x_offset as f32,
+                        20.0 + x_offset as f32
+                            + f32::sin(time as f32 * 4.0) * self.anim_actions_hover[j] * 3.0,
+                        482.0 - anim_y as f32 + 20.0 * j as f32,
+                    ),
+                    if self.action_select == j {
+                        Color::WHITE
+                    } else {
+                        Color::new(63, 63, 63, 255)
+                    },
+                );
+                d.draw_texture_rec(
+                    action_buttons,
+                    Rectangle::new(15.0, 15.0 * j as f32, 85.0, 15.0),
+                    Vector2::new(
+                        50.0 + x_offset as f32 + self.anim_actions_hover[j] * 5.0,
                         482.0 - anim_y as f32 + 20.0 * j as f32,
                     ),
                     if self.action_select == j {
@@ -517,7 +601,7 @@ impl BattleInterface {
         }
 
         if let Some(attack) = &self.attack {
-            attack.draw(d, res, time, frame_count, font, rng);
+            attack.draw(d, res, time, frame_count, numbers_font, rng);
         }
 
         if let Some(end_time) = self.battle_end {

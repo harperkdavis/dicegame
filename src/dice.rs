@@ -56,8 +56,14 @@ pub const DEFAULT_SET: DiceSet =
 
 pub const COMMON_SET: DiceSet = DiceSet::new([WHITE_DIE; 5]);
 
-pub fn roll_set(dice_set: &DiceSet, rng: &mut impl Rng) -> RollResult {
-    array::from_fn(|i| dice_set[i].roll(rng))
+pub fn roll_set(dice_set: &DiceSet, rng: &mut impl Rng, available: BoolSet) -> RollResult {
+    array::from_fn(|i| {
+        if available[i] {
+            dice_set[i].roll(rng)
+        } else {
+            Face::Blank
+        }
+    })
 }
 
 pub fn result_rectangles(dice_set: &DiceSet, results: &RollResult) -> [Rectangle; DICE_COUNT] {
@@ -251,8 +257,8 @@ impl DiceState {
             dice_last_rolled,
         }
     }
-    pub fn random(dice_set: &DiceSet, rng: &mut impl Rng) -> Self {
-        let current_roll = roll_set(dice_set, rng);
+    pub fn random(dice_set: &DiceSet, rng: &mut impl Rng, available: BoolSet) -> Self {
+        let current_roll = roll_set(dice_set, rng, available);
         let dice_last_rolled = [true; DICE_COUNT];
         Self::new(current_roll, dice_last_rolled)
     }
@@ -294,7 +300,10 @@ impl DiceState {
             .iter()
             .enumerate()
             .filter_map(|(i, in_flash)| {
-                (!in_flash && !self.current_roll[i].is_scoring()).then_some(i)
+                (!in_flash
+                    && !self.current_roll[i].is_scoring()
+                    && !self.current_roll[i].is_inactive())
+                .then_some(i)
             })
             .collect::<Indices>();
 
@@ -372,7 +381,7 @@ impl DiceState {
         self.current_roll
             .iter()
             .enumerate()
-            .filter_map(|(i, f)| (!f.is_scoring()).then_some(i))
+            .filter_map(|(i, f)| (!f.is_scoring() && !f.is_inactive()).then_some(i))
             .collect()
     }
 

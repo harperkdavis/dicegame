@@ -2,7 +2,7 @@ name = "FleshThing"
 sprite = "enemy"
 
 health = 100
-attack = 10
+attack = 100
 defense = 0
 
 [[drops]]

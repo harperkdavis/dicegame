@@ -1,24 +1,29 @@
 pub mod enemy;
+pub mod health;
 pub mod item;
 pub mod party;
+pub mod text;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, iter};
 
 pub use enemy::EnemyDef;
+pub use health::Health;
 pub use item::ItemDef;
 pub use party::PartyDef;
 use rand::Rng;
 
+pub const MAX_PARTY_SIZE: usize = 4;
+
 pub struct PartyMember {
     info: &'static PartyDef,
-    health: u32,
+    health: Health,
 }
 
 impl PartyMember {
     pub fn from_info(info: &'static PartyDef) -> Self {
         Self {
             info,
-            health: info.health,
+            health: Health::full(),
         }
     }
 
@@ -26,8 +31,16 @@ impl PartyMember {
         self.info
     }
 
-    pub fn health(&self) -> u32 {
-        self.health
+    pub fn health(&self) -> &Health {
+        &self.health
+    }
+
+    pub fn total_health(&self) -> u32 {
+        self.health.total()
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.health.is_dead()
     }
 }
 
@@ -61,6 +74,8 @@ pub enum Action {
 
 pub struct Battle {
     party: Vec<PartyMember>,
+    party_defending: [bool; MAX_PARTY_SIZE],
+    party_attacked: [u32; MAX_PARTY_SIZE],
     enemies: Vec<Enemy>,
     actions: VecDeque<(Action, usize)>,
     is_player_turn: bool,
@@ -73,9 +88,11 @@ pub struct DamageEvent {
 }
 
 impl Battle {
-    pub fn versus(party: &'static PartyDef, enemy: &'static EnemyDef) -> Self {
+    pub fn versus(party: &[&'static PartyDef], enemy: &'static EnemyDef) -> Self {
         Self {
-            party: vec![PartyMember::from_info(party)],
+            party: party.iter().map(|a| PartyMember::from_info(a)).collect(),
+            party_defending: [false; MAX_PARTY_SIZE],
+            party_attacked: [0; MAX_PARTY_SIZE],
             enemies: vec![Enemy::from_info(enemy)],
             actions: VecDeque::new(),
             is_player_turn: true,
@@ -116,7 +133,12 @@ impl Battle {
         if self.is_player_turn() {
             return None;
         }
-        self.actions.pop_front()
+        let (action, from) = self.actions.pop_front()?;
+        match action {
+            Action::Defend => self.party_defending[from] = true,
+            _ => (),
+        }
+        Some((action, from))
     }
 
     pub fn apply_damage(&mut self, index: usize, damage: u32) {
@@ -126,31 +148,89 @@ impl Battle {
     pub fn battle_result(&self) -> Option<bool> {
         if self.enemies.iter().all(|e| e.health == 0) {
             Some(true)
-        } else if self.party.iter().all(|e| e.health == 0) {
+        } else if self.party.iter().all(|e| e.is_dead()) {
             Some(false)
         } else {
             None
         }
     }
 
+    // decide a target for enemies
+    // defending party members are twice as likely to be selected
+    fn decide_enemy_target(&self, rng: &mut impl Rng) -> usize {
+        let candidates = self
+            .party
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                (!p.is_dead()).then_some((
+                    i,
+                    2_u32.pow(10 - self.party_attacked[i])
+                        * if self.party_defending[i] { 2 } else { 1 },
+                ))
+            })
+            .collect::<Box<_>>();
+        let total = candidates.iter().map(|(_, weight)| *weight).sum();
+        let pick = rng.random_range(0..total);
+        let mut sum = 0;
+        for (i, weight) in candidates {
+            sum += weight;
+            if sum >= pick {
+                return i;
+            }
+        }
+        0
+    }
+
     pub fn run_enemy_turn(&mut self, rng: &mut impl Rng) -> Vec<DamageEvent> {
         let mut damage = Vec::new();
+
+        if self.battle_result().is_some() {
+            return Vec::new();
+        }
 
         for (from, enemy) in self.enemies.iter().enumerate() {
             if enemy.health() == 0 {
                 continue;
             }
-            let target = rng.random_range(0..self.party.len());
-            let damage_dealt =
+            let target = self.decide_enemy_target(rng);
+            let attack_damage =
                 (enemy.info.attack as f64 * rng.random_range(0.9..1.1)).round() as u32;
 
+            let health = &mut self.party[target].health;
+            let limbs = health.targetable_limbs();
+            let limb_index = limbs[rng.random_range(0..limbs.len())];
+            let is_defending = self.party_defending[target];
+
+            let prev_health = health[limb_index];
+            if is_defending {
+                let new_damage = attack_damage / 2;
+                if health[limb_index] == 1 {
+                    // coinflip
+                    if rng.random_bool(0.5) {
+                        health[limb_index] = 0;
+                    }
+                } else {
+                    // leave with minimum 1 hp
+                    health[limb_index] = health[limb_index].saturating_sub(new_damage).max(1);
+                }
+            } else {
+                health[limb_index] = health[limb_index].saturating_sub(attack_damage);
+            }
+            let damage_dealt = prev_health.saturating_sub(health[limb_index]);
+            if damage_dealt > 0 {
+                self.party_attacked[target] += 1;
+            }
             damage.push(DamageEvent {
                 from,
                 to: target,
                 amount: damage_dealt,
             });
-            self.party[target].health = self.party[target].health.saturating_sub(damage_dealt);
         }
+
+        // reset defending state
+        self.party_defending = [false; MAX_PARTY_SIZE];
+        self.party_attacked = [0; MAX_PARTY_SIZE];
 
         damage
     }

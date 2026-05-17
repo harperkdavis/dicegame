@@ -86,7 +86,7 @@ void main() {
 
     vec3 color = (upLeftTexelFast.rgb * 0.5 * light_color + downRightTexelFast.rgb * 0.5 * light_color + upLeftTexelSlow.rgb * dark_color * 2.0 + downRightTexelSlow.rgb * dark_color * 2.0 + gradientToTopLeft) / 6.0 * stretch * (anim_in + 1.0) + anim_in * anim_in + anim_out;
 
-    float threshold = bayer4x4(gl_FragCoord.xy / 2.0);
+    float threshold = bayer4x4(gl_FragCoord.xy);
 
     // Simulate low bit depth (e.g. 5 bits per channel)
     float levels = 8.0;

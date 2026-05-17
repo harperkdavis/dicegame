@@ -163,6 +163,14 @@ impl Resource<'static> for MusicData {
 #[folder = "res/fonts"]
 pub struct FontAsset;
 
+fn get_font_size_for_path(file_path: &str) -> Option<i32> {
+    let path = Path::new(file_path);
+    let stem = path.file_stem()?.to_str()?;
+    let (_, suffix) = stem.rsplit_once('_')?;
+    let size = suffix.parse().ok()?;
+    Some(size)
+}
+
 impl Resource<'_> for Font {
     type Context = RaylibThread;
     type Asset = FontAsset;
@@ -173,8 +181,14 @@ impl Resource<'_> for Font {
         file_path: &str,
         data: &[u8],
     ) -> eyre::Result<Self> {
-        rl.load_font_from_memory(rt, &get_extension_for_raylib(file_path), data, 16, None)
-            .map_err(|e| eyre::eyre!("failed to load font: {e}"))
+        rl.load_font_from_memory(
+            rt,
+            &get_extension_for_raylib(file_path),
+            data,
+            get_font_size_for_path(file_path).unwrap_or(16),
+            None,
+        )
+        .map_err(|e| eyre::eyre!("failed to load font: {e}"))
     }
 }
 

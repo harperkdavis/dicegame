@@ -10,7 +10,9 @@ pub struct PartyDef {
     pub sprite: String,
     pub sprite_battle: String,
 
-    pub health: u32,
+    pub pronoun_personal: String,
+    pub pronoun_possessive: String,
+    pub pronoun_reflexive: String,
 }
 
 #[derive(Embed)]
