@@ -777,7 +777,7 @@ impl AttackInterface {
 
             d.draw_rectangle(
                 84 + i as i32 * 50 - (factor * 20.0) as i32,
-                9 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                 (factor * 40.0) as i32,
                 2,
                 super::health_color(slot_health, slot_max_health, time),
@@ -786,16 +786,16 @@ impl AttackInterface {
             if is_die_dead {
                 d.draw_line(
                     84 + i as i32 * 50 - 20,
-                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     84 + i as i32 * 50 + 20,
-                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    10 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     Color::RED,
                 );
                 d.draw_line(
                     84 + i as i32 * 50 + 20,
-                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     84 + i as i32 * 50 - 20,
-                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    10 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     Color::RED,
                 );
                 continue;

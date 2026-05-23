@@ -25,6 +25,7 @@ fn main() -> eyre::Result<()> {
         .size(1280, 960)
         .title("Level of Conflict")
         .build();
+
     let ra = RaylibAudio::init_audio_device()?;
 
     let res = res::load(&mut rl, &rt, &ra)?;
