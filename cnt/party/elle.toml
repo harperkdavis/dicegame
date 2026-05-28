@@ -1,7 +1,7 @@
-name = "Mench"
+name = "Elle"
 
 sprite = "girl2"
-sprite_battle = "girl3"
+sprite_battle = "elle_concept"
 
 pronoun_personal = "she"
 pronoun_possessive = "her"

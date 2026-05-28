@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![warn(clippy::inconsistent_struct_constructor)]
 
 mod dice;
 mod game;

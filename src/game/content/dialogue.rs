@@ -197,14 +197,14 @@ impl Line {
 
         for c in self.characters() {
             if let Some(elapsed) = line_elapsed
-                && reveal > elapsed {
-                    if reveal < elapsed + d.get_frame_time() as f64 && !c.character.is_whitespace()
-                    {
-                        res.snd("dialogue").play();
-                    }
-                    drew_all = false;
-                    break;
+                && reveal > elapsed
+            {
+                if reveal < elapsed + d.get_frame_time() as f64 && !c.character.is_whitespace() {
+                    res.snd("dialogue").play();
                 }
+                drew_all = false;
+                break;
+            }
             reveal += c.delay_time();
 
             d.draw_text_ex(

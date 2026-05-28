@@ -173,22 +173,39 @@ pub fn tick(d: &RaylibDrawHandle, long: &mut Long, short: &mut Short, res: &Res,
 pub fn update(d: &RaylibDrawHandle, _long: &mut Long, short: &mut Short, res: &Res, _cnt: Cnt) {
     let mut rng = rand::rng();
     let time = d.get_time();
-    if let Some(bi) = short.battle.as_mut() {
-        bi.update(d, res, &mut rng, time);
-        if short.battle_result.is_some() {
-            short.victory_music.update_stream();
+    let reset = if let Some(bi) = short.battle.as_mut() {
+        if bi.update(d, res, &mut rng, time) {
+            true
         } else {
-            short.background_music.update_stream();
+            if short.battle_result.is_some() {
+                short.victory_music.update_stream();
+                short.victory_music.set_volume(bi.music_volume(time) * 0.5);
+            } else {
+                short.background_music.update_stream();
 
-            if let Some((win, change_music_at)) = bi.battle_result()
-                && time >= change_music_at
-            {
-                short.battle_result = Some(win);
-                short.battle_music.stop_stream();
-                short.victory_music.seek_stream(0.0);
-                short.victory_music.play_stream();
+                if let Some((win, change_music_at)) = bi.battle_result()
+                    && time >= change_music_at
+                {
+                    short.battle_result = Some(win);
+                    short.battle_music.stop_stream();
+                    short.victory_music.seek_stream(0.0);
+                    short.victory_music.play_stream();
+                }
             }
+            false
         }
+    } else {
+        false
+    };
+
+    if reset {
+        short.battle = None;
+        short.battle_result = None;
+        short.victory_music.stop_stream();
+        short.victory_music.seek_stream(0.0);
+        short.battle_music.stop_stream();
+        short.battle_music.seek_stream(0.0);
+        short.background_music.play_stream();
     }
 }
 

@@ -1,0 +1,8 @@
+name = "Ess"
+
+sprite = "girl2"
+sprite_battle = "ess_concept"
+
+pronoun_personal = "he"
+pronoun_possessive = "his"
+pronoun_reflexive = "himself"

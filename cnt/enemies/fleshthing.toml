@@ -4,6 +4,17 @@ sprite = "enemy"
 health = 100
 attack = 100
 defense = 0
+reward = 100
+drop_total = 101
+
+flavor = [
+    "The Flesh Thing pulsates slowly before you.",
+    "Pus oozes out of many pores.",
+]
+
+flavor_intro = ["The Flesh Thing slowly lumbers towards you..."]
+
+flavor_defeat = ["It tumbles to the floor."]
 
 [[drops]]
 weight = 1

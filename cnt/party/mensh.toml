@@ -1,0 +1,8 @@
+name = "Mensh"
+
+sprite = "girl2"
+sprite_battle = "mensh_concept"
+
+pronoun_personal = "they"
+pronoun_possessive = "their"
+pronoun_reflexive = "themselves"
