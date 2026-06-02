@@ -6,9 +6,9 @@ use crate::{
         DICE_COUNT, DiceSet, DiceState, Indices, MoveResult, MoveType, boolset_to_indices,
         result_rectangles,
     },
-    game::battle::{
-        Health,
-        health::{self, MAX_HEALTH_VALUES},
+    game::{
+        Static,
+        battle::{Health, health::MAX_HEALTH_VALUES},
     },
     res::Res,
     util::{TextOutline, lerp},
@@ -356,7 +356,7 @@ impl AttackInterface {
     }
 
     pub fn new_round(
-        res: &Res,
+        Static { res, .. }: Static,
         dice_set: DiceSet,
         rng: &mut impl Rng,
         health: Health,
@@ -605,7 +605,7 @@ impl AttackInterface {
     pub fn update(
         &mut self,
         d: &RaylibDrawHandle,
-        res: &Res,
+        Static { res, .. }: Static,
         rng: &mut impl Rng,
         time: f64,
     ) -> Option<u32> {
@@ -724,7 +724,7 @@ impl AttackInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        res: &Res,
+        Static { res, .. }: Static,
         time: f64,
         frame_count: usize,
         font: &Font,

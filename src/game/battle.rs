@@ -4,10 +4,7 @@ pub mod item;
 pub mod party;
 pub mod text;
 
-use std::{
-    collections::{HashMap, VecDeque},
-    iter,
-};
+use std::collections::{HashMap, VecDeque};
 
 pub use enemy::EnemyDef;
 pub use health::Health;
@@ -15,7 +12,7 @@ pub use item::ItemDef;
 pub use party::PartyDef;
 use rand::Rng;
 
-use crate::game::Str;
+use crate::Str;
 
 pub const MAX_PARTY_SIZE: usize = 4;
 
@@ -153,9 +150,8 @@ impl Battle {
             return None;
         }
         let (action, from) = self.actions.pop_front()?;
-        match action {
-            Action::Defend => self.party_defending[from] = true,
-            _ => (),
+        if let Action::Defend = action {
+            self.party_defending[from] = true
         }
         Some((action, from))
     }

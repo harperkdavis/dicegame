@@ -1,7 +1,7 @@
 name = "Enn"
 
 sprite = "girl2"
-sprite_battle = "girl_torso"
+sprite_battle = "enn_concept"
 
 pronoun_personal = "she"
 pronoun_possessive = "her"

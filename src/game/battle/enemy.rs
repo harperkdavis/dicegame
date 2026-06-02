@@ -2,7 +2,10 @@ use rand::{Rng, seq::IndexedRandom};
 use rust_embed::Embed;
 use serde::Deserialize;
 
-use crate::game::{Content, Str, content::Library};
+use crate::{
+    Str,
+    game::{Content, content::Library},
+};
 
 use super::ItemDef;
 

@@ -9,14 +9,13 @@ use raylib::prelude::*;
 use crate::{
     dice::DEFAULT_SET,
     game::{
+        Frame, INPUT_CANCEL, INPUT_CONFIRM, INPUT_DOWN, INPUT_LEFT, INPUT_RIGHT, INPUT_UP, Static,
         battle::{
             Action, Battle, DamageEvent, Rewards,
-            health::{self, HEAD_INDEX, LIMBS, MAX_HEAD_HEALTH, MAX_HEALTH_VALUES},
+            health::{HEAD_INDEX, LIMBS, MAX_HEAD_HEALTH, MAX_HEALTH_VALUES},
             text,
         },
-        content::Cnt,
     },
-    res::Res,
     util::{TextOutline, lerp, smooth_min},
 };
 
@@ -70,15 +69,15 @@ const MAX_TEXT_COUNT: usize = 6;
 const TEXT_READ_TIME: f64 = 3.0;
 
 impl BattleInterface {
-    pub fn new(time: f64, cnt: Cnt) -> Self {
+    pub fn new(time: f64, s: Static) -> Self {
         let battle = Battle::versus(
             &[
-                &cnt.party["enn"],
-                &cnt.party["ess"],
-                &cnt.party["elle"],
-                &cnt.party["mensh"],
+                s.party("enn"),
+                s.party("ess"),
+                s.party("elle"),
+                s.party("mensh"),
             ],
-            &cnt.enemies["fleshthing"],
+            s.enemy("fleshthing"),
         );
         let party_count = battle.party().len();
         let enemy_count = battle.enemies().len();
@@ -175,10 +174,12 @@ impl BattleInterface {
     pub fn update(
         &mut self,
         d: &RaylibDrawHandle,
-        res: &Res,
+        s: Static,
+        frame: Frame,
         rng: &mut impl Rng,
-        time: f64,
     ) -> bool {
+        let time = frame.time;
+
         if let Some(anim_fadeout) = self.anim_fadeout
             && time - anim_fadeout >= 1.0
         {
@@ -202,8 +203,8 @@ impl BattleInterface {
                             (anim_in * rewards.money as f64 / 5.0).floor() as u32 * 5;
 
                         if self.anim_reward_money > self.anim_reward_money_prev {
-                            res.snd("reward_money").set_pitch((0.25 + anim_in) as f32);
-                            res.snd("reward_money").play();
+                            s.snd("reward_money").set_pitch((0.25 + anim_in) as f32);
+                            s.snd("reward_money").play();
 
                             let before = format!("{:05}", self.anim_reward_money_prev);
                             let after = format!("{:05}", self.anim_reward_money);
@@ -220,7 +221,7 @@ impl BattleInterface {
                             self.anim_reward_money_digits = [time; 5];
                             self.anim_reward_reveal = Some(Some(0));
 
-                            res.snd("reward_money_final").play();
+                            s.snd("reward_money_final").play();
                         }
                     }
                     // Revealing items (0.5s per)
@@ -233,21 +234,21 @@ impl BattleInterface {
                         if current_reveal > reveal {
                             self.anim_reward_reveal = Some(Some(current_reveal));
 
-                            res.snd("reward_item").play();
+                            s.snd("reward_item").play();
                         }
                     }
                 }
             }
 
-            if d.is_key_pressed(KeyboardKey::KEY_Z) {
+            if frame.actions_down[INPUT_CONFIRM] {
                 match self.anim_reward_reveal {
                     Some(Some(i)) if i == rewards.items.len() => {
                         self.anim_fadeout = Some(time);
                     }
                     _ => {
-                        res.snd("reward_money_final").play();
+                        s.snd("reward_money_final").play();
                         if !rewards.items.is_empty() {
-                            res.snd("reward_item").play();
+                            s.snd("reward_item").play();
                         }
                         self.anim_reward_reveal = Some(Some(rewards.items.len()))
                     }
@@ -257,11 +258,11 @@ impl BattleInterface {
         }
 
         if self.in_intro {
-            if time - self.battle_start >= TWO_BAR_DURATION || d.is_key_down(KeyboardKey::KEY_Z) {
+            if time - self.battle_start >= TWO_BAR_DURATION || frame.actions_down[INPUT_CONFIRM] {
                 self.in_intro = false;
                 self.set_menu_animation_state();
                 // battle start needs to be when the music starts or offset by the two bar duration
-                if !d.is_key_down(KeyboardKey::KEY_Z) {
+                if !frame.actions_down[INPUT_CONFIRM] {
                     self.battle_start += TWO_BAR_DURATION;
                 }
 
@@ -308,66 +309,63 @@ impl BattleInterface {
         if self.battle.is_player_turn() {
             if let Some(enemy) = self.enemy_select.as_mut() {
                 let max = self.battle.enemies().len() - 1;
-                if d.is_key_pressed(KeyboardKey::KEY_UP) || d.is_key_pressed(KeyboardKey::KEY_LEFT)
-                {
+                if frame.actions_down[INPUT_LEFT] || frame.actions_down[INPUT_UP] {
                     if *enemy == 0 {
                         *enemy = max;
                     } else {
                         *enemy -= 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_DOWN)
-                    || d.is_key_pressed(KeyboardKey::KEY_RIGHT)
-                {
+                if frame.actions_down[INPUT_RIGHT] || frame.actions_down[INPUT_DOWN] {
                     if *enemy == max {
                         *enemy = 0;
                     } else {
                         *enemy += 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_X) {
+                if frame.actions_down[INPUT_CANCEL] {
                     self.enemy_select = None;
-                    res.snd("menu").play();
-                } else if d.is_key_pressed(KeyboardKey::KEY_Z) {
+                    s.snd("menu").play();
+                } else if frame.actions_down[INPUT_CONFIRM] {
                     self.battle.push_action(Action::Attack(*enemy));
                     self.anim_actions_hover = [0.0; 4];
-                    res.snd("select").play();
+                    s.snd("select").play();
                     self.enemy_select = None;
                 }
             } else {
-                if d.is_key_pressed(KeyboardKey::KEY_UP) {
-                    res.snd("menu").play();
+                if frame.actions_down[INPUT_UP] {
+                    s.snd("menu").play();
                     if self.action_select == 0 {
                         self.action_select = 2;
                     } else {
                         self.action_select -= 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_DOWN) {
-                    res.snd("menu").play();
+                if frame.actions_down[INPUT_DOWN] {
+                    s.snd("menu").play();
                     if self.action_select == 2 {
                         self.action_select = 0;
                     } else {
                         self.action_select += 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_Z) {
+                if frame.actions_down[INPUT_CONFIRM] {
                     if self.action_select == 0 {
-                        res.snd("select").play();
+                        s.snd("select").play();
                         self.enemy_select = Some(0);
                     } else if self.action_select == 1 {
-                        res.snd("select").play();
+                        s.snd("select").play();
                         self.battle.push_action(Action::Defend);
                     }
                 }
             }
         } else if self.is_enemy_turn {
             // enemy turn
-            if time > self.anim_last_damage + 1.0 || d.is_key_pressed(KeyboardKey::KEY_Z) {
+            if time > self.anim_last_damage + 1.0 || frame.actions_down[INPUT_CONFIRM] {
                 self.anim_last_damage = time;
                 if let Some(DamageEvent { to, amount, .. }) = self.anim_party_damage_queue.pop() {
-                    res.snd("player_hurt").set_pitch(rng.random_range(0.9..1.1));
-                    res.snd("player_hurt").play();
+                    s.snd("player_hurt").set_pitch(rng.random_range(0.9..1.1));
+                    s.snd("player_hurt").play();
                     self.anim_party_damage[to] = Some((time, amount));
                 } else {
                     self.is_enemy_turn = false;
@@ -406,7 +404,7 @@ impl BattleInterface {
         } else if let Some((action, party_member)) = &self.current_action {
             let member = &self.battle.party()[*party_member];
             if let Some(expires) = self.anim_action_wait {
-                if time >= expires || d.is_key_pressed(KeyboardKey::KEY_Z) {
+                if time >= expires || frame.actions_down[INPUT_CONFIRM] {
                     self.anim_action_wait = None;
                     self.attack = None;
                     self.attack_result = None;
@@ -424,19 +422,19 @@ impl BattleInterface {
                                 let enemy_def = self.battle.enemies()[*target].info();
 
                                 if *damage == 0 {
-                                    res.snd("attack_miss").set_pitch(rng.random_range(0.9..1.1));
-                                    res.snd("attack_miss").play();
+                                    s.snd("attack_miss").set_pitch(rng.random_range(0.9..1.1));
+                                    s.snd("attack_miss").play();
                                 } else {
-                                    res.snd("enemy_hurt").set_pitch(rng.random_range(0.9..1.1));
-                                    res.snd("enemy_hurt").play();
+                                    s.snd("enemy_hurt").set_pitch(rng.random_range(0.9..1.1));
+                                    s.snd("enemy_hurt").play();
                                 }
 
                                 self.anim_enemy_damage[*target] = Some((dat, *damage));
                                 if self.battle.enemies()[*target].health() == 0 {
                                     // TODO: kill sound
                                     self.anim_enemy_death[*target] = Some(dat);
-                                    res.snd("enemy_hurt").stop();
-                                    res.snd("enemy_death").play();
+                                    s.snd("enemy_hurt").stop();
+                                    s.snd("enemy_death").play();
 
                                     if let Some(flavor) = enemy_def.generate_flavor_defeat(rng) {
                                         self.push_event_text(flavor.to_owned(), time);
@@ -446,19 +444,19 @@ impl BattleInterface {
 
                             let attack = self.attack.as_ref().unwrap();
                             // after
-                            if attack.can_advance(time, d.is_key_pressed(KeyboardKey::KEY_Z)) {
+                            if attack.can_advance(time, frame.actions_down[INPUT_CONFIRM]) {
                                 self.attack = None;
                                 self.attack_result = None;
                                 self.current_action = None;
                             }
                         } else if let Some(attack) = &mut self.attack {
-                            if let Some(damage) = attack.update(d, res, rng, time) {
+                            if let Some(damage) = attack.update(d, s, rng, time) {
                                 self.attack_result = Some(damage);
                                 self.battle.apply_damage(*target, damage, rng);
                             }
                         } else {
                             self.attack = Some(AttackInterface::new_round(
-                                res,
+                                s,
                                 DEFAULT_SET,
                                 rng,
                                 *member.health(),
@@ -473,8 +471,8 @@ impl BattleInterface {
                             member.info(),
                         );
 
-                        res.snd("action_defend").set_volume(0.5);
-                        res.snd("action_defend").play();
+                        s.snd("action_defend").set_volume(0.5);
+                        s.snd("action_defend").play();
                         self.push_event_text(text, time);
                         self.anim_action_wait = Some(time + 1.0);
                     }
@@ -501,13 +499,14 @@ impl BattleInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        res: &Res,
-        time: f64,
-        frame_count: usize,
+        s: Static,
+        Frame {
+            time, frame_count, ..
+        }: Frame,
         rng: &mut impl Rng,
     ) {
-        let mut shader = res.sha("battle_background").borrow_mut();
-        let battle_background_ocean = res.tex("battle_background_ocean");
+        let mut shader = s.sha("battle_background").borrow_mut();
+        let battle_background_ocean = s.tex("battle_background_ocean");
 
         let main_time_loc = shader.get_shader_location("main_time");
         let end_time_loc = shader.get_shader_location("end_time");
@@ -565,13 +564,13 @@ impl BattleInterface {
                 Color::BLACK,
             );
             d.draw_texture(
-                res.tex("enn_battleintro"),
+                s.tex("enn_battleintro"),
                 -70 - (anim_in * 20.0) as i32,
                 150 + (anim_in.powi(2) * 400.0) as i32,
                 Color::WHITE,
             );
             d.draw_texture(
-                res.tex("fleshthing_concept"),
+                s.tex("fleshthing_concept"),
                 350 + (anim_in * 50.0) as i32,
                 150 + (anim_in.powi(2) * 400.0) as i32,
                 Color::WHITE,
@@ -593,11 +592,11 @@ impl BattleInterface {
 
         let anim_in_battle = f32::exp(((time - self.battle_start) * -4.0) as f32);
 
-        let text_font = res.fnt("nokia_15");
-        let numbers_font = res.fnt("execution");
+        let text_font = s.fnt("nokia_15");
+        let numbers_font = s.fnt("execution");
         // draw actual battle
         for (i, enemy) in self.battle.enemies().iter().enumerate() {
-            let sprite = res.tex(enemy.info().sprite.as_str());
+            let sprite = s.tex(enemy.info().sprite.as_str());
             let enemy_x = ENEMY_X + (anim_in_battle * 200.0) as i32;
             let enemy_y = ENEMY_Y;
             if let Some(start) = self.anim_enemy_death[i] {
@@ -656,14 +655,14 @@ impl BattleInterface {
             }
         }
         d.draw_texture(
-            res.tex("girl2"),
+            s.tex("girl2"),
             200 - (anim_in_battle * 200.0) as i32,
             300,
             Color::WHITE,
         );
 
         for (i, member) in self.battle.party().iter().enumerate() {
-            let sprite = res.tex(member.info().sprite_battle.as_str());
+            let sprite = s.tex(member.info().sprite_battle.as_str());
             let anim = self.anim_actions_menu[i];
             let anim_y = (anim * 80.0).round() as i32 - (anim_in_battle * 200.0) as i32;
             let x_offset = (i * 160) as i32;
@@ -711,7 +710,7 @@ impl BattleInterface {
             }
 
             d.draw_texture(
-                res.tex("ui_charactername"),
+                s.tex("ui_charactername"),
                 x_offset,
                 460 - anim_y,
                 Color::new(51, 51, 51, 255),
@@ -727,7 +726,7 @@ impl BattleInterface {
             );
 
             d.draw_texture(
-                res.tex("ui/body/default/base"),
+                s.tex("ui/body/default/base"),
                 x_offset + 115,
                 460 - anim_y,
                 Color::WHITE,
@@ -738,7 +737,7 @@ impl BattleInterface {
                 let max_health = MAX_HEALTH_VALUES[i];
                 let limb_color = super::health_color(health, max_health, time);
                 d.draw_texture(
-                    res.tex(format!("ui/body/default/{seg}").as_str()),
+                    s.tex(format!("ui/body/default/{seg}").as_str()),
                     x_offset + 115,
                     460 - anim_y,
                     limb_color,
@@ -769,7 +768,7 @@ impl BattleInterface {
             );
 
             d.draw_text_outline(
-                res.fnt("execution_small"),
+                s.fnt("execution_small"),
                 "/400",
                 x_offset as f32 + 35.0,
                 463.0 - anim_y as f32,
@@ -779,7 +778,7 @@ impl BattleInterface {
 
             d.draw_rectangle(x_offset, 480 - anim_y, 160, 80, Color::BLACK);
 
-            let action_buttons = res.tex("battle_actions");
+            let action_buttons = s.tex("battle_actions");
 
             for j in 0..4 {
                 d.draw_texture_rec(
@@ -813,7 +812,7 @@ impl BattleInterface {
         }
 
         if let Some(attack) = &self.attack {
-            attack.draw(d, res, time, frame_count, numbers_font, rng);
+            attack.draw(d, s, time, frame_count, numbers_font, rng);
         }
 
         for i in 0..MAX_TEXT_COUNT {
@@ -823,7 +822,7 @@ impl BattleInterface {
                 let anim_in = f32::exp((-elapsed * 4.0) as f32);
                 let anim_out = (1.0 - (TEXT_READ_TIME - elapsed).min(1.0)).powi(5).min(1.0) as f32;
                 d.draw_text_outline(
-                    res.fnt("nokia_15"),
+                    s.fnt("nokia_15"),
                     text,
                     200.0 + (i * 10) as f32 - anim_out * 500.0 - elapsed as f32 * 20.0,
                     120.0 + anim_in * 10.0 + (i * 20) as f32,
@@ -863,7 +862,7 @@ impl BattleInterface {
                 let letter_elapsed = time - revealed_at;
                 let letter_anim = 0.5_f64.powf(letter_elapsed * 8.0) as f32;
                 d.draw_texture_rec(
-                    res.tex("battle_result_letters"),
+                    s.tex("battle_result_letters"),
                     Rectangle::new(i as f32 * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         110.0 + 50.0 * i as f32 + rng.random_range(-4.0..=4.0) * full_anim as f32,

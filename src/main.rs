@@ -9,17 +9,16 @@ mod test;
 pub mod util;
 
 use dice::DEFAULT_SET;
-use game::content::{Cnt, dialogue::Sequence};
+use game::content::Cnt;
 use raylib::prelude::*;
+use smartstring::{LazyCompact, SmartString};
 
-use crate::game::state::{self, TICK_RATE};
+use crate::game::{
+    Frame, InputConfig, State, Static,
+    state::{self},
+};
 
-struct SequenceState {
-    seq: &'static Sequence,
-    index: usize,
-    seq_start: f64,
-    line_start: Option<f64>,
-}
+pub type Str = SmartString<LazyCompact>;
 
 fn main() -> eyre::Result<()> {
     let (mut rl, rt) = raylib::init()
@@ -32,32 +31,32 @@ fn main() -> eyre::Result<()> {
     let res = res::load(&mut rl, &rt, &ra)?;
     let cnt = Cnt::load(&res)?;
 
-    let (mut long, mut short) = state::load_file(&res, cnt, &ra)?;
+    let s = Static {
+        ra: &ra,
+        res: &res,
+        cnt,
+    };
+
+    let (long, short) = state::load_file(s)?;
+    let input_config = InputConfig::default();
+
+    let mut game = State { long, short };
 
     let mut render_texture = rl.load_render_texture(&rt, 640, 480)?;
 
     test::print_complete_statistics(&DEFAULT_SET);
 
     let mut frame_count = 0;
-    let mut acc = 0.0;
-
     while !rl.window_should_close() {
+        let frame = Frame::create(&rl, frame_count, &input_config);
         let mut d = rl.begin_drawing(&rt);
 
-        acc += d.get_frame_time() * TICK_RATE as f32;
-        acc = acc.min(10.0);
-        while acc >= 1.0 {
-            state::tick(&d, &mut long, &mut short, &res, cnt);
-            acc -= 1.0;
-        }
-
-        let time = d.get_time();
-        state::update(&d, &mut long, &mut short, &res, cnt);
+        state::update(&d, &mut game, s, frame)?;
 
         let mut dd = d.begin_texture_mode(&rt, &mut render_texture);
         dd.clear_background(Color::BLACK);
 
-        state::draw(&mut dd, &long, &mut short, &res, cnt, time, frame_count);
+        state::draw(&mut dd, &mut game, s, frame)?;
 
         drop(dd);
 

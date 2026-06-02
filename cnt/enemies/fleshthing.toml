@@ -1,8 +1,8 @@
 name = "FleshThing"
 sprite = "enemy"
 
-health = 100
-attack = 100
+health = 1
+attack = 1
 defense = 0
 reward = 100
 drop_total = 101
