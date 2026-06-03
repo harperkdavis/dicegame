@@ -4,13 +4,15 @@ pub mod item;
 pub mod party;
 pub mod text;
 
-use std::{collections::VecDeque, iter};
+use std::collections::{HashMap, VecDeque};
 
 pub use enemy::EnemyDef;
 pub use health::Health;
 pub use item::ItemDef;
 pub use party::PartyDef;
 use rand::Rng;
+
+use crate::Str;
 
 pub const MAX_PARTY_SIZE: usize = 4;
 
@@ -79,12 +81,19 @@ pub struct Battle {
     enemies: Vec<Enemy>,
     actions: VecDeque<(Action, usize)>,
     is_player_turn: bool,
+    reward_money: u32,
+    reward_items: Vec<Str>,
 }
 
 pub struct DamageEvent {
     pub from: usize,
     pub to: usize,
     pub amount: u32,
+}
+
+pub struct Rewards {
+    pub money: u32,
+    pub items: HashMap<Str, usize>,
 }
 
 impl Battle {
@@ -96,6 +105,9 @@ impl Battle {
             enemies: vec![Enemy::from_info(enemy)],
             actions: VecDeque::new(),
             is_player_turn: true,
+
+            reward_money: 0,
+            reward_items: Vec::new(),
         }
     }
 
@@ -133,16 +145,32 @@ impl Battle {
         if self.is_player_turn() {
             return None;
         }
+        if self.battle_result().is_some() {
+            self.actions.clear();
+            return None;
+        }
         let (action, from) = self.actions.pop_front()?;
-        match action {
-            Action::Defend => self.party_defending[from] = true,
-            _ => (),
+        if let Action::Defend = action {
+            self.party_defending[from] = true
         }
         Some((action, from))
     }
 
-    pub fn apply_damage(&mut self, index: usize, damage: u32) {
+    fn process_enemy_death(&mut self, index: usize, rng: &mut impl Rng) {
+        let enemy_def = self.enemies[index].info();
+        self.reward_money = self
+            .reward_money
+            .saturating_add(enemy_def.calculate_reward(rng));
+        self.reward_items
+            .append(&mut enemy_def.calculate_drops(rng));
+    }
+
+    pub fn apply_damage(&mut self, index: usize, damage: u32, rng: &mut impl Rng) {
         self.enemies[index].health = self.enemies[index].health.saturating_sub(damage);
+
+        if self.enemies[index].health == 0 {
+            self.process_enemy_death(index, rng);
+        }
     }
 
     pub fn battle_result(&self) -> Option<bool> {
@@ -150,6 +178,22 @@ impl Battle {
             Some(true)
         } else if self.party.iter().all(|e| e.is_dead()) {
             Some(false)
+        } else {
+            None
+        }
+    }
+    pub fn rewards(&self) -> Option<Rewards> {
+        if self.battle_result().is_some_and(|a| a) {
+            let money = self.reward_money;
+            let items = self
+                .reward_items
+                .iter()
+                .fold(HashMap::new(), |mut map, item| {
+                    *map.entry(item.clone()).or_insert(0) += 1;
+                    map
+                });
+
+            Some(Rewards { money, items })
         } else {
             None
         }

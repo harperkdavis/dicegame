@@ -1,7 +1,6 @@
 # Set room name
 room = "home"
-music = "002_Morning_Evening"
-enemy_chance = 0.5
+enemy_chance = 0.2
 
 [layout]
 width = 256
@@ -12,18 +11,18 @@ collision = [{ x = 100, y = 100, w = 50, h = 50 }]
 [[layout.triggers]]
 x = 5
 y = 5
-w = 1
-h = 1
+w = 40
+h = 40
 seq = ["""
 { speaker = "Test" } I want to make sure the speaker works.
 This is how /!some/ dialogue should look when examining something.
 Isn't that neat?"""]
 
 [[layout.triggers]]
-x = 10
-y = 5
-w = 2
-h = 2
+x = 100
+y = 200
+w = 40
+h = 40
 seq = [
     """
 (every morning, before I go to sleep, my mind always drifts to the same fantasy.)
@@ -57,49 +56,45 @@ seq = [
 { speaker = "enn" } I mean, I guess I could talk about it...
 { speaker = "enn" } ... It's just been a long damn time.
 { speaker = "enn" } I think I woke up around 8.""",
+    "Sorry for talking too much.",
 ]
+
+[[layout.triggers]]
+x = 200
+y = 100
+w = 50
+h = 50
+seq = """
+write([[{ speaker = "enn", face = "sad" } Uh, how did you get over here?
+{ speaker = "enn", face = "sad" } XX_XX_XX_XX_XX_XX_
+Is it really that easy?]])
+wait(0.5)
+write([[{ group_every = true } YOU SEE IT IS ACTUALLY VERY SIMPLE. I JUST. DID THIS.
+{ group_every = true } DID YOU JUST SEE THAT LIKE WOW]])
+wait(1.0)
+write("Oh... I see.")
+"""
+
+[[layout.triggers]]
+x = 300
+y = 100
+w = 50
+h = 50
+seq = ["""
+{ speaker = "Enn" } what even was that back there?
+{ speaker = "Elle" } it's hard to tell...
+{ speaker = "Ess" } is everyone okay?
+{ speaker = "Mensh" } haha.. glad we could get things done.
+(you feel like they never listen.)
+"""]
+
+[[layout.triggers]]
+x = 150
+y = 20
+w = 40
+h = 40
+seq = ["""
+(it's a television set. cheap stuff.)
+"""]
 
 [layout.transitions]
-
-
-[sequences.test]
-seq = ["""
-{ speaker = "Test" } I want to make sure the speaker works.
-This is how /!some/ dialogue should look when examining something.
-Isn't that neat?"""]
-
-[sequences.wakeup]
-seq = [
-    """
-(every morning, before I go to sleep, my mind always drifts to the same fantasy.)
-(i imagine myself, in my bed...)
-(a metal handlebar drops from the sky, attached to a cable that extends further than i can see.)
-(i slowly sit up and grab it with both hands.)
-(the metal is cold, with perforations that dig into my skin.)
-(it slowly rises, accelerating.)
-(my arms are slowly extended until they hold my weight.)
-(the constant pull of my body becomes more apparent.)
-(the comforter slips off my feet as I rise out of my bed.)
-(my legs hang under me.)
-(i pass right through the ceiling.)
-(i begin to rise faster and faster.)
-(i don't know what the cable is attached to...)
-(... but i hold on for dear life as the city shrinks below me.)
-(my arms are sore within minutes.)
-(after a while, it starts to get cold.)
-(the numbness starts at my fingertips.)
-(and spreads through my hands.)
-(it becomes harder to breathe.)
-(i start to suffocate.)
-(my hands finally falter, and i lose grip of the handlebars.)
-(and as i fall down to the earth, for a brief moment...)
-(i take comfort in the fact that my fate has been decided.)
-(and then i fall asleep.)
-{ speaker = "enn" } ...
-{ speaker = "enn" } Shit, sorry, I was just thinking.
-{ speaker = "enn" } What did you ask me again?
-{ speaker = "enn" } ...
-{ speaker = "enn" } I mean, I guess I could talk about it...
-{ speaker = "enn" } ... It's just been a long damn time.
-{ speaker = "enn" } I think I woke up around 8.""",
-]

@@ -7,18 +7,18 @@ use std::{
     path::PathBuf,
 };
 
-use flags::FlagsDef;
-use room::Room;
+pub use dialogue::Line;
+pub use room::Room;
 use rust_embed::Embed;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::res::Res;
 
-use super::battle::{EnemyDef, ItemDef, PartyDef};
+pub use super::battle::{EnemyDef, ItemDef, PartyDef};
 
 pub mod dialogue;
-pub mod flags;
 pub mod room;
+pub mod seq;
 
 fn cnt_id(file_path: &str) -> String {
     let mut path_buf = PathBuf::from(file_path);
@@ -91,7 +91,6 @@ where
 
 #[derive(Clone, Copy)]
 pub struct Cnt {
-    pub flags: &'static FlagsDef,
     pub items: &'static Library<ItemDef>,
     pub party: &'static Library<PartyDef>,
     pub enemies: &'static Library<EnemyDef>,
@@ -100,7 +99,6 @@ pub struct Cnt {
 
 impl Cnt {
     pub fn load(res: &Res) -> eyre::Result<Self> {
-        let flags: &'static _ = Box::leak(Box::new(FlagsDef::load()));
         let items: &'static _ = Box::leak(Box::new(
             Library::load((), res).map_err(|e| eyre::eyre!("failed to load all items: {e}"))?,
         ));
@@ -117,7 +115,6 @@ impl Cnt {
         ));
 
         Ok(Self {
-            flags,
             items,
             party,
             enemies,

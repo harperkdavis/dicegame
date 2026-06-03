@@ -46,12 +46,21 @@ where
         color: Color,
         outline: Color,
     ) {
-        for (xo, yo) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+        for (xo, yo) in [
+            (-1.0, -1.0),
+            (1.0, -1.0),
+            (-1.0, 1.0),
+            (1.0, 1.0),
+            (-1.0, 0.0),
+            (1.0, 0.0),
+            (-1.0, 0.0),
+            (0.0, 1.0),
+        ] {
             self.draw_text_ex(
                 font,
                 text,
                 Vector2::new(x.round() + xo, y.round() + yo),
-                16.0,
+                font.baseSize as f32,
                 1.0,
                 outline,
             );
@@ -60,7 +69,7 @@ where
             font,
             text,
             Vector2::new(x.round(), y.round()),
-            16.0,
+            font.baseSize as f32,
             1.0,
             color,
         );

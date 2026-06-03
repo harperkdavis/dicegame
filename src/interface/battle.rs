@@ -1,18 +1,21 @@
-use std::iter;
+use std::{array, iter};
 
-use rand::Rng;
+use rand::{
+    Rng,
+    seq::{IndexedRandom, IteratorRandom},
+};
 use raylib::prelude::*;
 
 use crate::{
     dice::DEFAULT_SET,
     game::{
+        Frame, INPUT_CANCEL, INPUT_CONFIRM, INPUT_DOWN, INPUT_LEFT, INPUT_RIGHT, INPUT_UP, Static,
         battle::{
-            Action, Battle, DamageEvent,
-            health::{self, HEAD_INDEX, LIMBS, MAX_HEAD_HEALTH, MAX_HEALTH_VALUES},
+            Action, Battle, DamageEvent, Rewards,
+            health::{HEAD_INDEX, LIMBS, MAX_HEAD_HEALTH, MAX_HEALTH_VALUES},
+            text,
         },
-        content::Cnt,
     },
-    res::Res,
     util::{TextOutline, lerp, smooth_min},
 };
 
@@ -26,6 +29,7 @@ struct QueuedDamage {
 
 pub struct BattleInterface {
     battle: Battle,
+    rewards: Option<Rewards>,
     attack: Option<AttackInterface>,
     attack_result: Option<u32>,
     battle_start: f64,
@@ -45,24 +49,42 @@ pub struct BattleInterface {
     anim_party_death: Box<[Option<f64>]>,
 
     anim_last_damage: f64,
+    anim_action_wait: Option<f64>,
     anim_party_damage_queue: Vec<DamageEvent>,
+
+    anim_event_text: [Option<(String, f64)>; MAX_TEXT_COUNT],
+
+    anim_reward_reveal: Option<Option<usize>>,
+    anim_reward_money: u32,
+    anim_reward_money_prev: u32,
+    anim_reward_money_digits: [f64; 5],
+
+    anim_fadeout: Option<f64>,
 }
 
 const ENEMY_X: i32 = 450;
 const ENEMY_Y: i32 = 200;
 const TWO_BAR_DURATION: f64 = 60.0 / 160.0 * 7.0;
+const MAX_TEXT_COUNT: usize = 6;
+const TEXT_READ_TIME: f64 = 3.0;
 
 impl BattleInterface {
-    pub fn new(time: f64, cnt: Cnt) -> Self {
+    pub fn new(time: f64, s: Static) -> Self {
         let battle = Battle::versus(
-            &[&cnt.party["enn"], &cnt.party["kue"]],
-            &cnt.enemies["fleshthing"],
+            &[
+                s.party("enn"),
+                s.party("ess"),
+                s.party("elle"),
+                s.party("mensh"),
+            ],
+            s.enemy("fleshthing"),
         );
         let party_count = battle.party().len();
         let enemy_count = battle.enemies().len();
 
         Self {
             battle,
+            rewards: None,
             attack: None,
             attack_result: None,
             battle_start: time,
@@ -82,7 +104,17 @@ impl BattleInterface {
             anim_party_death: iter::repeat_n(None, party_count).collect(),
 
             anim_last_damage: 0.0,
+            anim_action_wait: None,
             anim_party_damage_queue: Vec::new(),
+
+            anim_event_text: array::from_fn(|_| None),
+
+            anim_reward_reveal: None,
+            anim_reward_money: 0,
+            anim_reward_money_prev: 0,
+            anim_reward_money_digits: [0.0; 5],
+
+            anim_fadeout: None,
         }
     }
 
@@ -101,6 +133,7 @@ impl BattleInterface {
         self.enemy_select = None;
 
         self.anim_last_damage = 0.0;
+        self.anim_action_wait = None;
         self.anim_party_damage_queue = Vec::new();
     }
 
@@ -109,21 +142,144 @@ impl BattleInterface {
         self.anim_enemy_damage = iter::repeat_n(None, enemy_count).collect();
     }
 
-    pub fn update(&mut self, d: &RaylibDrawHandle, res: &Res, rng: &mut impl Rng, time: f64) {
-        if self.battle_end.is_some() {
-            return;
+    fn push_event_text(&mut self, text: String, time: f64) -> usize {
+        let index = match self.anim_event_text.iter().position(Option::is_none) {
+            Some(u) => u,
+            None => {
+                self.anim_event_text
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, oa), (_, ob)| {
+                        f64::total_cmp(&oa.as_ref().unwrap().1, &ob.as_ref().unwrap().1)
+                    })
+                    .unwrap()
+                    .0
+            }
+        };
+
+        self.anim_event_text[index] = Some((text, time));
+
+        index
+    }
+
+    pub fn music_volume(&self, time: f64) -> f32 {
+        if let Some(start) = self.anim_fadeout {
+            let elapsed = time - start;
+            (1.0 - elapsed as f32).clamp(0.0, 1.0)
+        } else {
+            1.0
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        d: &RaylibDrawHandle,
+        s: Static,
+        frame: Frame,
+        rng: &mut impl Rng,
+    ) -> bool {
+        let time = frame.time;
+
+        if let Some(anim_fadeout) = self.anim_fadeout
+            && time - anim_fadeout >= 1.0
+        {
+            return true;
+        }
+        if let Some(end) = self.battle_end {
+            let elapsed = time - end;
+            let rewards = self.rewards.as_ref().unwrap();
+
+            if elapsed > 6.0 {
+                match self.anim_reward_reveal {
+                    // Yet to reveal
+                    None => {
+                        // if we want a sound effect or something it goes here.
+                        self.anim_reward_reveal = Some(None);
+                    }
+                    // Revealing money (2s)
+                    Some(None) => {
+                        let anim_in = 1.0 - (1.0 - (elapsed - 6.0) / 2.0).powi(3).clamp(0.0, 1.0);
+                        self.anim_reward_money =
+                            (anim_in * rewards.money as f64 / 5.0).floor() as u32 * 5;
+
+                        if self.anim_reward_money > self.anim_reward_money_prev {
+                            s.snd("reward_money").set_pitch((0.25 + anim_in) as f32);
+                            s.snd("reward_money").play();
+
+                            let before = format!("{:05}", self.anim_reward_money_prev);
+                            let after = format!("{:05}", self.anim_reward_money);
+
+                            for i in 0..5 {
+                                if before.chars().nth(i) != after.chars().nth(i) {
+                                    self.anim_reward_money_digits[i] = time;
+                                }
+                            }
+                            self.anim_reward_money_prev = self.anim_reward_money;
+                        }
+
+                        if elapsed >= 8.0 {
+                            self.anim_reward_money_digits = [time; 5];
+                            self.anim_reward_reveal = Some(Some(0));
+
+                            s.snd("reward_money_final").play();
+                        }
+                    }
+                    // Revealing items (0.5s per)
+                    Some(Some(reveal)) => {
+                        self.anim_reward_money = rewards.money;
+                        self.anim_reward_money_prev = rewards.money;
+
+                        let current_reveal =
+                            (((elapsed - 8.0) / 0.5).floor() as usize).min(rewards.items.len());
+                        if current_reveal > reveal {
+                            self.anim_reward_reveal = Some(Some(current_reveal));
+
+                            s.snd("reward_item").play();
+                        }
+                    }
+                }
+            }
+
+            if frame.actions_down[INPUT_CONFIRM] {
+                match self.anim_reward_reveal {
+                    Some(Some(i)) if i == rewards.items.len() => {
+                        if self.anim_fadeout.is_none() {
+                            self.anim_fadeout = Some(time);
+                        }
+                    }
+                    _ => {
+                        s.snd("reward_money_final").play();
+                        if !rewards.items.is_empty() {
+                            s.snd("reward_item").play();
+                        }
+                        self.anim_reward_reveal = Some(Some(rewards.items.len()))
+                    }
+                }
+            }
+            return false;
         }
 
         if self.in_intro {
-            if time - self.battle_start >= TWO_BAR_DURATION || d.is_key_down(KeyboardKey::KEY_Z) {
+            if time - self.battle_start >= TWO_BAR_DURATION || frame.actions_down[INPUT_CONFIRM] {
                 self.in_intro = false;
                 self.set_menu_animation_state();
                 // battle start needs to be when the music starts or offset by the two bar duration
-                if !d.is_key_down(KeyboardKey::KEY_Z) {
+                if !frame.actions_down[INPUT_CONFIRM] {
                     self.battle_start += TWO_BAR_DURATION;
                 }
+
+                let intro_flavors = self
+                    .battle
+                    .enemies()
+                    .iter()
+                    .filter_map(|e| e.info().generate_flavor_intro(rng))
+                    .collect::<Box<[_]>>();
+
+                for f in intro_flavors {
+                    self.push_event_text(f.to_owned(), time);
+                }
             }
-            return;
+            return false;
         }
         for i in 0..self.battle.party().len() {
             self.anim_actions_menu[i] = lerp(
@@ -144,133 +300,186 @@ impl BattleInterface {
             )
         }
 
+        for i in 0..MAX_TEXT_COUNT {
+            if let Some((_, start)) = self.anim_event_text[i].as_ref()
+                && time - start >= TEXT_READ_TIME
+            {
+                self.anim_event_text[i] = None;
+            }
+        }
+
         if self.battle.is_player_turn() {
             if let Some(enemy) = self.enemy_select.as_mut() {
                 let max = self.battle.enemies().len() - 1;
-                if d.is_key_pressed(KeyboardKey::KEY_UP) || d.is_key_pressed(KeyboardKey::KEY_LEFT)
-                {
+                if frame.actions_down[INPUT_LEFT] || frame.actions_down[INPUT_UP] {
                     if *enemy == 0 {
                         *enemy = max;
                     } else {
                         *enemy -= 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_DOWN)
-                    || d.is_key_pressed(KeyboardKey::KEY_RIGHT)
-                {
+                if frame.actions_down[INPUT_RIGHT] || frame.actions_down[INPUT_DOWN] {
                     if *enemy == max {
                         *enemy = 0;
                     } else {
                         *enemy += 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_X) {
+                if frame.actions_down[INPUT_CANCEL] {
                     self.enemy_select = None;
-                    res.snd("menu").play();
-                } else if d.is_key_pressed(KeyboardKey::KEY_Z) {
+                    s.snd("menu").play();
+                } else if frame.actions_down[INPUT_CONFIRM] {
                     self.battle.push_action(Action::Attack(*enemy));
                     self.anim_actions_hover = [0.0; 4];
-                    res.snd("select").play();
+                    s.snd("select").play();
                     self.enemy_select = None;
                 }
             } else {
-                if d.is_key_pressed(KeyboardKey::KEY_UP) {
-                    res.snd("menu").play();
+                if frame.actions_down[INPUT_UP] {
+                    s.snd("menu").play();
                     if self.action_select == 0 {
                         self.action_select = 2;
                     } else {
                         self.action_select -= 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_DOWN) {
-                    res.snd("menu").play();
+                if frame.actions_down[INPUT_DOWN] {
+                    s.snd("menu").play();
                     if self.action_select == 2 {
                         self.action_select = 0;
                     } else {
                         self.action_select += 1;
                     }
                 }
-                if d.is_key_pressed(KeyboardKey::KEY_Z) {
+                if frame.actions_down[INPUT_CONFIRM] {
                     if self.action_select == 0 {
-                        res.snd("select").play();
+                        s.snd("select").play();
                         self.enemy_select = Some(0);
                     } else if self.action_select == 1 {
-                        res.snd("select").play();
+                        s.snd("select").play();
                         self.battle.push_action(Action::Defend);
                     }
                 }
             }
         } else if self.is_enemy_turn {
             // enemy turn
-            if time > self.anim_last_damage + 1.0 || d.is_key_pressed(KeyboardKey::KEY_Z) {
+            if time > self.anim_last_damage + 1.0 || frame.actions_down[INPUT_CONFIRM] {
                 self.anim_last_damage = time;
                 if let Some(DamageEvent { to, amount, .. }) = self.anim_party_damage_queue.pop() {
-                    res.snd("party_hurt").set_pitch(rng.random_range(0.9..1.1));
-                    res.snd("party_hurt").play();
+                    s.snd("player_hurt").set_pitch(rng.random_range(0.9..1.1));
+                    s.snd("player_hurt").play();
                     self.anim_party_damage[to] = Some((time, amount));
                 } else {
                     self.is_enemy_turn = false;
                     self.battle.finish_enemy_turn();
                     if self.battle.battle_result().is_some() {
-                        let music_progress = time - self.battle_start;
-                        let next_end_time = (music_progress / TWO_BAR_DURATION).ceil()
-                            * TWO_BAR_DURATION
-                            + self.battle_start;
-                        self.battle_end = Some(next_end_time);
+                        self.rewards = Some(
+                            self.battle
+                                .rewards()
+                                .expect("should get rewards (battle is finished)"),
+                        );
+                        // consider adding back but its a little annoying
+                        // let music_progress = time - self.battle_start;
+                        // let next_end_time = (music_progress / TWO_BAR_DURATION).ceil()
+                        //    * TWO_BAR_DURATION
+                        //    + self.battle_start;
+                        self.battle_end = Some(time);
                     } else {
+                        let flavor_options = self
+                            .battle
+                            .enemies()
+                            .iter()
+                            .filter_map(|e| {
+                                (e.health() > 0)
+                                    .then(|| e.info().generate_flavor(rng))
+                                    .flatten()
+                            })
+                            .collect::<Box<[_]>>();
+                        if let Some(flavor) = flavor_options.choose(rng) {
+                            self.push_event_text(flavor.to_string(), time);
+                        }
+
                         self.set_menu_animation_state();
                     }
                 }
             }
         } else if let Some((action, party_member)) = &self.current_action {
             let member = &self.battle.party()[*party_member];
-            match action {
-                Action::Attack(target) => {
-                    if let Some(damage) = &self.attack_result {
-                        let attack = self.attack.as_ref().unwrap();
-                        if let Some(dat) = attack.damage_apply_time()
-                            && time > dat
-                            && self.anim_enemy_damage[*target].is_none()
-                        {
-                            if *damage == 0 {
-                                res.snd("miss").set_pitch(rng.random_range(0.9..1.1));
-                                res.snd("miss").play();
-                            } else {
-                                res.snd("enemy_hurt").set_pitch(rng.random_range(0.9..1.1));
-                                res.snd("enemy_hurt").play();
+            if let Some(expires) = self.anim_action_wait {
+                if time >= expires || frame.actions_down[INPUT_CONFIRM] {
+                    self.anim_action_wait = None;
+                    self.attack = None;
+                    self.attack_result = None;
+                    self.current_action = None;
+                }
+            } else {
+                match action {
+                    Action::Attack(target) => {
+                        if let Some(damage) = &self.attack_result {
+                            let attack = self.attack.as_ref().unwrap();
+                            if let Some(dat) = attack.damage_apply_time()
+                                && time > dat
+                                && self.anim_enemy_damage[*target].is_none()
+                            {
+                                let enemy_def = self.battle.enemies()[*target].info();
+
+                                if *damage == 0 {
+                                    s.snd("attack_miss").set_pitch(rng.random_range(0.9..1.1));
+                                    s.snd("attack_miss").play();
+                                } else {
+                                    s.snd("enemy_hurt").set_pitch(rng.random_range(0.9..1.1));
+                                    s.snd("enemy_hurt").play();
+                                }
+
+                                self.anim_enemy_damage[*target] = Some((dat, *damage));
+                                if self.battle.enemies()[*target].health() == 0 {
+                                    // TODO: kill sound
+                                    self.anim_enemy_death[*target] = Some(dat);
+                                    s.snd("enemy_hurt").stop();
+                                    s.snd("enemy_death").play();
+
+                                    if let Some(flavor) = enemy_def.generate_flavor_defeat(rng) {
+                                        self.push_event_text(flavor.to_owned(), time);
+                                    }
+                                }
                             }
 
-                            self.anim_enemy_damage[*target] = Some((dat, *damage));
-                            if self.battle.enemies()[*target].health() == 0 {
-                                // TODO: kill sound
-                                self.anim_enemy_death[*target] = Some(dat);
+                            let attack = self.attack.as_ref().unwrap();
+                            // after
+                            if attack.can_advance(time, frame.actions_down[INPUT_CONFIRM]) {
+                                self.attack = None;
+                                self.attack_result = None;
+                                self.current_action = None;
                             }
+                        } else if let Some(attack) = &mut self.attack {
+                            if let Some(damage) = attack.update(d, s, rng, time) {
+                                self.attack_result = Some(damage);
+                                self.battle.apply_damage(*target, damage, rng);
+                            }
+                        } else {
+                            self.attack = Some(AttackInterface::new_round(
+                                s,
+                                DEFAULT_SET,
+                                rng,
+                                *member.health(),
+                                time,
+                                Vector2::new(ENEMY_X as f32 - 10.0, ENEMY_Y as f32 - 30.0),
+                            ));
                         }
-                        // after
-                        if attack.can_advance(time, d.is_key_pressed(KeyboardKey::KEY_Z)) {
-                            self.attack = None;
-                            self.attack_result = None;
-                            self.current_action = None;
-                        }
-                    } else if let Some(attack) = &mut self.attack {
-                        if let Some(damage) = attack.update(d, res, rng, time) {
-                            self.attack_result = Some(damage);
-                            self.battle.apply_damage(*target, damage);
-                        }
-                    } else {
-                        self.attack = Some(AttackInterface::new_round(
-                            res,
-                            DEFAULT_SET,
-                            rng,
-                            *member.health(),
-                            time,
-                            Vector2::new(ENEMY_X as f32 - 10.0, ENEMY_Y as f32 - 30.0),
-                        ));
                     }
+                    Action::Defend => {
+                        let text = text::replace_placeholders(
+                            text::DEFEND_LINES.choose(rng).unwrap(),
+                            member.info(),
+                        );
+
+                        s.snd("action_defend").set_volume(0.5);
+                        s.snd("action_defend").play();
+                        self.push_event_text(text, time);
+                        self.anim_action_wait = Some(time + 1.0);
+                    }
+                    Action::Flee => (),
                 }
-                // TODO: add animations and sounds for others
-                Action::Defend => self.current_action = None,
-                Action::Flee => (),
             }
         } else if let Some(next_action) = self.battle.process_next_action() {
             self.current_action = Some(next_action);
@@ -280,6 +489,8 @@ impl BattleInterface {
             self.is_enemy_turn = true;
             self.anim_party_damage_queue = self.battle.run_enemy_turn(rng);
         }
+
+        false
     }
 
     pub fn battle_result(&self) -> Option<(bool, f64)> {
@@ -290,13 +501,14 @@ impl BattleInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        res: &Res,
-        time: f64,
-        frame_count: usize,
+        s: Static,
+        Frame {
+            time, frame_count, ..
+        }: Frame,
         rng: &mut impl Rng,
     ) {
-        let mut shader = res.sha("battle_background").borrow_mut();
-        let battle_background_ocean = res.tex("battle_background_ocean");
+        let mut shader = s.sha("battle_background").borrow_mut();
+        let battle_background_ocean = s.tex("battle_background_ocean");
 
         let main_time_loc = shader.get_shader_location("main_time");
         let end_time_loc = shader.get_shader_location("end_time");
@@ -309,7 +521,7 @@ impl BattleInterface {
                 smooth_min(
                     time_f32,
                     end_time as f32 + 1.0 - self.battle_start as f32,
-                    2.0,
+                    3.0,
                 ),
             );
             let diff = time - (end_time + 2.0);
@@ -354,13 +566,13 @@ impl BattleInterface {
                 Color::BLACK,
             );
             d.draw_texture(
-                res.tex("enn_battleintro"),
+                s.tex("enn_battleintro"),
                 -70 - (anim_in * 20.0) as i32,
                 150 + (anim_in.powi(2) * 400.0) as i32,
                 Color::WHITE,
             );
             d.draw_texture(
-                res.tex("fleshthing_concept"),
+                s.tex("fleshthing_concept"),
                 350 + (anim_in * 50.0) as i32,
                 150 + (anim_in.powi(2) * 400.0) as i32,
                 Color::WHITE,
@@ -382,11 +594,11 @@ impl BattleInterface {
 
         let anim_in_battle = f32::exp(((time - self.battle_start) * -4.0) as f32);
 
-        let text_font = res.fnt("unnamedfont");
-        let numbers_font = res.fnt("execution");
+        let text_font = s.fnt("nokia_15");
+        let numbers_font = s.fnt("execution");
         // draw actual battle
         for (i, enemy) in self.battle.enemies().iter().enumerate() {
-            let sprite = res.tex(enemy.info().sprite.as_str());
+            let sprite = s.tex(enemy.info().sprite.as_str());
             let enemy_x = ENEMY_X + (anim_in_battle * 200.0) as i32;
             let enemy_y = ENEMY_Y;
             if let Some(start) = self.anim_enemy_death[i] {
@@ -426,13 +638,13 @@ impl BattleInterface {
             if let Some(index) = self.enemy_select
                 && i == index
             {
-                d.draw_text_ex(
+                d.draw_text_outline(
                     text_font,
                     &enemy.info().name.to_uppercase(),
-                    Vector2::new(ENEMY_X as f32, ENEMY_Y as f32),
-                    16.0,
-                    0.0,
+                    ENEMY_X as f32,
+                    ENEMY_Y as f32,
                     Color::WHITE,
+                    Color::BLACK,
                 );
                 d.draw_text_outline(
                     numbers_font,
@@ -445,18 +657,19 @@ impl BattleInterface {
             }
         }
         d.draw_texture(
-            res.tex("girl2"),
+            s.tex("girl2"),
             200 - (anim_in_battle * 200.0) as i32,
             300,
             Color::WHITE,
         );
 
         for (i, member) in self.battle.party().iter().enumerate() {
-            let sprite = res.tex(member.info().sprite_battle.as_str());
+            let sprite = s.tex(member.info().sprite_battle.as_str());
             let anim = self.anim_actions_menu[i];
             let anim_y = (anim * 80.0).round() as i32 - (anim_in_battle * 200.0) as i32;
             let x_offset = (i * 160) as i32;
-            let char_y = 470 - 128 - anim_y + (f64::sin(time * 2.0) * 4.0).round() as i32
+            let char_y = 470 - 128 - anim_y
+                + (f64::sin(time * 2.0 + i as f64) * 4.0).round() as i32
                 - (anim * 10.0) as i32;
 
             if let Some((start, damage)) = self.anim_party_damage[i] {
@@ -499,7 +712,7 @@ impl BattleInterface {
             }
 
             d.draw_texture(
-                res.tex("ui_charactername"),
+                s.tex("ui_charactername"),
                 x_offset,
                 460 - anim_y,
                 Color::new(51, 51, 51, 255),
@@ -507,15 +720,15 @@ impl BattleInterface {
 
             d.draw_text_outline(
                 text_font,
-                &member.info().name.to_uppercase(),
-                5.0 + x_offset as f32,
-                443.0 - anim_y as f32,
+                &member.info().name,
+                4.0 + x_offset as f32,
+                444.0 - anim_y as f32,
                 Color::WHITE,
                 Color::BLACK,
             );
 
             d.draw_texture(
-                res.tex("ui/body/default/base"),
+                s.tex("ui/body/default/base"),
                 x_offset + 115,
                 460 - anim_y,
                 Color::WHITE,
@@ -526,7 +739,7 @@ impl BattleInterface {
                 let max_health = MAX_HEALTH_VALUES[i];
                 let limb_color = super::health_color(health, max_health, time);
                 d.draw_texture(
-                    res.tex(format!("ui/body/default/{seg}").as_str()),
+                    s.tex(format!("ui/body/default/{seg}").as_str()),
                     x_offset + 115,
                     460 - anim_y,
                     limb_color,
@@ -557,7 +770,7 @@ impl BattleInterface {
             );
 
             d.draw_text_outline(
-                res.fnt("execution_small"),
+                s.fnt("execution_small"),
                 "/400",
                 x_offset as f32 + 35.0,
                 463.0 - anim_y as f32,
@@ -567,7 +780,7 @@ impl BattleInterface {
 
             d.draw_rectangle(x_offset, 480 - anim_y, 160, 80, Color::BLACK);
 
-            let action_buttons = res.tex("battle_actions");
+            let action_buttons = s.tex("battle_actions");
 
             for j in 0..4 {
                 d.draw_texture_rec(
@@ -601,12 +814,33 @@ impl BattleInterface {
         }
 
         if let Some(attack) = &self.attack {
-            attack.draw(d, res, time, frame_count, numbers_font, rng);
+            attack.draw(d, s, time, frame_count, numbers_font, rng);
+        }
+
+        for i in 0..MAX_TEXT_COUNT {
+            if let Some((text, start)) = self.anim_event_text[i].as_ref() {
+                let elapsed = time - start;
+                let fade_in = (elapsed * 4.0).min(1.0) as f32;
+                let anim_in = f32::exp((-elapsed * 4.0) as f32);
+                let anim_out = (1.0 - (TEXT_READ_TIME - elapsed).min(1.0)).powi(5).min(1.0) as f32;
+                d.draw_text_outline(
+                    s.fnt("nokia_15"),
+                    text,
+                    200.0 + (i * 10) as f32 - anim_out * 500.0 - elapsed as f32 * 20.0,
+                    120.0 + anim_in * 10.0 + (i * 20) as f32,
+                    Color::WHITE.alpha(fade_in),
+                    Color::BLANK.alpha(fade_in),
+                );
+            }
         }
 
         if let Some(end_time) = self.battle_end {
             let reveal_start = end_time + (7.0 / 8.0);
-            let reveal_count = ((time - reveal_start).max(0.0) * 8.0).ceil() as usize;
+            let reveal_count = if self.anim_reward_reveal.is_some() {
+                9
+            } else {
+                ((time - reveal_start).max(0.0) * 8.0).ceil() as usize
+            };
 
             let elapsed = time - end_time;
             let full_anim = if elapsed > 2.0 {
@@ -615,16 +849,34 @@ impl BattleInterface {
                 0.0
             };
 
+            let box_anim_in = if self.anim_reward_reveal.is_some() {
+                1.0
+            } else {
+                ((elapsed - 4.0).max(0.0) / 2.0).min(1.0).powi(21) as f32
+            };
+
+            d.draw_rectangle(
+                0,
+                (90.0 - box_anim_in * 50.0) as i32,
+                640,
+                (200.0 * box_anim_in) as i32,
+                Color::BLACK,
+            );
+
             for i in 0..reveal_count.min(9) {
                 let revealed_at = reveal_start + i as f64 / 8.0;
                 let letter_elapsed = time - revealed_at;
-                let letter_anim = 0.5_f64.powf(letter_elapsed * 8.0) as f32;
+                let letter_anim = if self.anim_reward_reveal.is_some() {
+                    0.0
+                } else {
+                    0.5_f64.powf(letter_elapsed * 8.0) as f32
+                };
                 d.draw_texture_rec(
-                    res.tex("execution"),
+                    s.tex("battle_result_letters"),
                     Rectangle::new(i as f32 * 22.0, 0.0, 22.0, 42.0),
                     Vector2::new(
                         110.0 + 50.0 * i as f32 + rng.random_range(-4.0..=4.0) * full_anim as f32,
-                        60.0 + letter_anim * 10.0
+                        65.0 + letter_anim * 10.0
                             + full_anim as f32 * 20.0
                             + rng.random_range(-4.0..=4.0) * full_anim as f32
                             + if elapsed > 2.0 {
@@ -636,6 +888,80 @@ impl BattleInterface {
                     Color::WHITE,
                 )
             }
+
+            if elapsed > 6.0 || self.anim_reward_reveal.is_some() {
+                let rewards = self.rewards.as_ref().unwrap();
+
+                if let Some(o) = self.anim_reward_reveal.as_ref() {
+                    d.draw_text_ex(
+                        text_font,
+                        "REWARD$",
+                        Vector2::new(110.0, 140.0),
+                        15.0,
+                        0.0,
+                        Color::WHITE,
+                    );
+
+                    let reward_money = if o.is_some() {
+                        format!("{: >5}", rewards.money)
+                    } else {
+                        format!("{: >5}", self.anim_reward_money)
+                    };
+                    for i in 0..5 {
+                        if let Some(c) = reward_money
+                            .chars()
+                            .nth(i)
+                            .and_then(|c| if c.is_whitespace() { None } else { Some(c) })
+                        {
+                            let anim =
+                                f64::exp(-(time - self.anim_reward_money_digits[i]).max(0.0) * 8.0);
+                            d.draw_text_ex(
+                                numbers_font,
+                                &format!("{c}"),
+                                Vector2::new(190.0 + i as f32 * 10.0, 142.0 - anim as f32 * 3.0),
+                                16.0,
+                                0.0,
+                                Color::WHITE,
+                            );
+                        }
+                    }
+
+                    if let Some(ind) = o {
+                        d.draw_text_ex(
+                            text_font,
+                            "ITEMS",
+                            Vector2::new(320.0, 140.0),
+                            15.0,
+                            0.0,
+                            Color::WHITE,
+                        );
+
+                        for (i, (item, count)) in rewards.items.iter().enumerate() {
+                            if *ind > i {
+                                let name = item;
+                                d.draw_text_ex(
+                                    text_font,
+                                    &format!("{name} x{count}"),
+                                    Vector2::new(400.0, 140.0 + i as f32 * 20.0),
+                                    15.0,
+                                    0.0,
+                                    Color::WHITE,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(anim_fadeout) = self.anim_fadeout {
+            d.draw_rectangle(
+                0,
+                0,
+                640,
+                480,
+                Color::BLACK.alpha((time - anim_fadeout) as f32),
+            );
         }
     }
 }

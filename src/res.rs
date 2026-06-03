@@ -14,6 +14,8 @@ use raylib::prelude::*;
 use rust_embed::Embed;
 use smartstring::{LazyCompact, SmartString};
 
+use crate::Str;
+
 pub type ResourceId = SmartString<LazyCompact>;
 
 fn res_id(file_path: &str) -> String {
@@ -73,6 +75,10 @@ impl<'a, R: Resource<'a>> Library<R> {
             .get(id)
             .ok_or_else(|| eyre::eyre!("fatal: invalid asset key {id:?}"))
             .unwrap()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&Str, &R)> {
+        self.0.iter()
     }
 }
 
@@ -239,6 +245,10 @@ impl<'audio> Res<'audio> {
         ResourceId: Borrow<K>,
     {
         &self.snd[k]
+    }
+
+    pub fn mus_iter(&self) -> impl Iterator<Item = (&Str, &MusicData)> {
+        self.mus.iter()
     }
 
     pub fn load_mus<'a, K>(&self, k: &K, ra: &'a RaylibAudio) -> Music<'a>

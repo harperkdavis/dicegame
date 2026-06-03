@@ -6,9 +6,9 @@ use crate::{
         DICE_COUNT, DiceSet, DiceState, Indices, MoveResult, MoveType, boolset_to_indices,
         result_rectangles,
     },
-    game::battle::{
-        Health,
-        health::{self, MAX_HEALTH_VALUES},
+    game::{
+        Static,
+        battle::{Health, health::MAX_HEALTH_VALUES},
     },
     res::Res,
     util::{TextOutline, lerp},
@@ -356,7 +356,7 @@ impl AttackInterface {
     }
 
     pub fn new_round(
-        res: &Res,
+        Static { res, .. }: Static,
         dice_set: DiceSet,
         rng: &mut impl Rng,
         health: Health,
@@ -605,7 +605,7 @@ impl AttackInterface {
     pub fn update(
         &mut self,
         d: &RaylibDrawHandle,
-        res: &Res,
+        Static { res, .. }: Static,
         rng: &mut impl Rng,
         time: f64,
     ) -> Option<u32> {
@@ -724,7 +724,7 @@ impl AttackInterface {
     pub fn draw(
         &self,
         d: &mut impl RaylibDraw,
-        res: &Res,
+        Static { res, .. }: Static,
         time: f64,
         frame_count: usize,
         font: &Font,
@@ -777,7 +777,7 @@ impl AttackInterface {
 
             d.draw_rectangle(
                 84 + i as i32 * 50 - (factor * 20.0) as i32,
-                9 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                 (factor * 40.0) as i32,
                 2,
                 super::health_color(slot_health, slot_max_health, time),
@@ -786,16 +786,16 @@ impl AttackInterface {
             if is_die_dead {
                 d.draw_line(
                     84 + i as i32 * 50 - 20,
-                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     84 + i as i32 * 50 + 20,
-                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    10 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     Color::RED,
                 );
                 d.draw_line(
                     84 + i as i32 * 50 + 20,
-                    5 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    0 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     84 + i as i32 * 50 - 20,
-                    15 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
+                    10 - (20.0 * turn_anim + out_anim as f32 * 20.0) as i32,
                     Color::RED,
                 );
                 continue;

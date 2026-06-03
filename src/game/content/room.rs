@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 
+use raylib::{color::Color, prelude::RaylibDraw};
 use rust_embed::Embed;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::game::Str;
+use crate::{
+    Str,
+    game::{Static, content::seq::SeqDef},
+};
 
-use super::{Content, dialogue::Sequence};
+use super::Content;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Collision {
     pub x: i32,
     pub y: i32,
@@ -15,29 +19,17 @@ pub struct Collision {
     pub h: i32,
 }
 
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum SequenceOption {
-    Inline(Vec<Sequence>),
-    Ref(Str),
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Trigger {
     pub x: i32,
     pub y: i32,
     pub w: i32,
     pub h: i32,
     pub auto: Option<bool>,
-    pub seq: SequenceOption,
+    pub seq: SeqDef,
 }
 
-#[derive(Deserialize)]
-pub struct SeqDef {
-    pub seq: Vec<Sequence>,
-}
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Layout {
     pub width: u32,
     pub height: u32,
@@ -46,14 +38,14 @@ pub struct Layout {
     pub triggers: Vec<Trigger>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Room {
     pub room: String,
-    pub music: String,
+    pub music: Option<String>,
     pub music_pitch: Option<f64>,
     pub enemy_chance: Option<f64>,
+    pub background: Option<Str>,
     pub layout: Layout,
-    pub sequences: HashMap<String, SeqDef>,
 }
 
 #[derive(Embed)]
@@ -66,5 +58,13 @@ impl Content for Room {
     fn load(_: Self::Context, _: &crate::res::Res, data: &'static [u8]) -> eyre::Result<Self> {
         // perform checks later
         toml::from_slice(data).map_err(|e| eyre::eyre!("failed to load room: {e}"))
+    }
+}
+
+impl Room {
+    pub fn draw(&self, d: &mut impl RaylibDraw, s: Static) {
+        for t in &self.layout.triggers {
+            d.draw_rectangle(t.x, t.y, t.w, t.h, Color::DARKBLUE);
+        }
     }
 }
