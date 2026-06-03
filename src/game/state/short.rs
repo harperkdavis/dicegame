@@ -145,7 +145,7 @@ impl ActiveSequence {
             let finished = line.draw(
                 d,
                 s.res,
-                s.fnt("default"),
+                s.fnt("default2"),
                 frame.time - self.dialogue_started.unwrap(),
                 line_started.map(|e| frame.time - e),
                 frame.delta,

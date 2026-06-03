@@ -202,21 +202,26 @@ impl Line {
         d.draw_rectangle(80, 350 + anim_y, 440, 120, Color::BLACK);
 
         if let Some(speaker) = self.meta.speaker.as_deref() {
+            /*
             d.draw_rectangle(79, 309 + anim_y, 122, 36, Color::WHITE);
             d.draw_rectangle(80, 310 + anim_y, 120, 34, Color::BLACK);
 
             d.draw_text_ex(
                 font,
-                &speaker.to_uppercase(),
-                Vector2::new(95.0, (320 + anim_y) as f32),
+                speaker,
+                Vector2::new(95.0, (321 + anim_y) as f32),
                 16.0,
                 1.0,
                 Color::WHITE,
             );
+            */
 
             let face = self.meta.face.as_deref().unwrap_or("neutral");
             d.draw_texture(
-                res.tex(&Str::from_str(format!("face/{speaker}/{face}").as_str()).unwrap()),
+                res.tex(
+                    &Str::from_str(format!("face/{}/{face}", speaker.to_lowercase()).as_str())
+                        .unwrap(),
+                ),
                 80,
                 342 + anim_y,
                 Color::WHITE,

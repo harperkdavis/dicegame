@@ -1,6 +1,6 @@
 # Set room name
 room = "home"
-enemy_chance = 0.0
+enemy_chance = 0.2
 
 [layout]
 width = 256
@@ -81,10 +81,20 @@ y = 100
 w = 50
 h = 50
 seq = ["""
-{ speaker = "enn" } what even was that back there?
-{ speaker = "elle" } it's hard to tell...
-{ speaker = "ess" } is everyone okay?
-{ speaker = "mensh" } haha.. glad we could get things done.
+{ speaker = "Enn" } what even was that back there?
+{ speaker = "Elle" } it's hard to tell...
+{ speaker = "Ess" } is everyone okay?
+{ speaker = "Mensh" } haha.. glad we could get things done.
+(you feel like they never listen.)
+"""]
+
+[[layout.triggers]]
+x = 150
+y = 20
+w = 40
+h = 40
+seq = ["""
+(it's a television set. cheap stuff.)
 """]
 
 [layout.transitions]

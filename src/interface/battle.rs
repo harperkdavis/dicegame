@@ -243,7 +243,9 @@ impl BattleInterface {
             if frame.actions_down[INPUT_CONFIRM] {
                 match self.anim_reward_reveal {
                     Some(Some(i)) if i == rewards.items.len() => {
-                        self.anim_fadeout = Some(time);
+                        if self.anim_fadeout.is_none() {
+                            self.anim_fadeout = Some(time);
+                        }
                     }
                     _ => {
                         s.snd("reward_money_final").play();
@@ -834,7 +836,11 @@ impl BattleInterface {
 
         if let Some(end_time) = self.battle_end {
             let reveal_start = end_time + (7.0 / 8.0);
-            let reveal_count = ((time - reveal_start).max(0.0) * 8.0).ceil() as usize;
+            let reveal_count = if self.anim_reward_reveal.is_some() {
+                9
+            } else {
+                ((time - reveal_start).max(0.0) * 8.0).ceil() as usize
+            };
 
             let elapsed = time - end_time;
             let full_anim = if elapsed > 2.0 {
@@ -860,7 +866,11 @@ impl BattleInterface {
             for i in 0..reveal_count.min(9) {
                 let revealed_at = reveal_start + i as f64 / 8.0;
                 let letter_elapsed = time - revealed_at;
-                let letter_anim = 0.5_f64.powf(letter_elapsed * 8.0) as f32;
+                let letter_anim = if self.anim_reward_reveal.is_some() {
+                    0.0
+                } else {
+                    0.5_f64.powf(letter_elapsed * 8.0) as f32
+                };
                 d.draw_texture_rec(
                     s.tex("battle_result_letters"),
                     Rectangle::new(i as f32 * 22.0, 0.0, 22.0, 42.0),
