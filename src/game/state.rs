@@ -8,7 +8,6 @@ pub use long::Long;
 use rand::Rng;
 use raylib::{
     color::Color,
-    ffi::KeyboardKey,
     prelude::{RaylibDraw, RaylibDrawHandle},
 };
 pub use short::Short;
@@ -16,7 +15,6 @@ pub use short::Short;
 use crate::{
     game::{Frame, INPUT_CONFIRM, Static, content::room::Room, state::short::ActiveSequence},
     interface::BattleInterface,
-    util::is_within,
 };
 
 pub const TICK_RATE: usize = 50;
@@ -74,7 +72,7 @@ fn update_movement(
 
     if frame.actions_down[INPUT_CONFIRM] {
         for t in &room.layout.triggers {
-            if is_within(short.pos_x as i32, short.pos_y as i32, t.x, t.y, t.w, t.h) {
+            if t.r.is_within(short.pos_x as i32, short.pos_y as i32) {
                 short.seq = Some(ActiveSequence::new(
                     &room.room,
                     t.seq.clone(),
@@ -150,7 +148,8 @@ pub fn draw(
     if let Some(bi) = short.battle.as_mut() {
         bi.draw(d, s, frame, &mut rng);
     } else {
-        room.draw(d, s);
+        room.draw_background(d, s);
+        room.draw(d, s, None);
         d.draw_rectangle(
             (short.pos_x - PLAYER_W / 2.0) as i32,
             (short.pos_y - PLAYER_H / 2.0) as i32,

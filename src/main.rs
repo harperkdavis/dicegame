@@ -13,9 +13,12 @@ use game::content::Cnt;
 use raylib::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::game::{
-    Frame, InputConfig, State, Static,
-    state::{self},
+use crate::{
+    game::{
+        Frame, InputConfig, State, Static,
+        state::{self},
+    },
+    interface::EditorInterface,
 };
 
 pub type Str = SmartString<LazyCompact>;
@@ -25,6 +28,8 @@ fn main() -> eyre::Result<()> {
         .size(1280, 960)
         .title("Level of Conflict")
         .build();
+
+    rl.set_exit_key(Some(KeyboardKey::KEY_GRAVE));
 
     let ra = RaylibAudio::init_audio_device()?;
 
@@ -36,6 +41,9 @@ fn main() -> eyre::Result<()> {
         res: &res,
         cnt,
     };
+
+    let is_in_editor = true;
+    let mut editor = EditorInterface::new(s)?;
 
     let (long, short) = state::load_file(s)?;
     let input_config = InputConfig::default();
@@ -52,12 +60,20 @@ fn main() -> eyre::Result<()> {
         let frame = Frame::create(&rl, frame_count, &input_config);
         let mut d = rl.begin_drawing(&rt);
 
-        state::update(&d, &mut game, s, frame)?;
+        if is_in_editor {
+            editor.update(&mut d, s, frame)?;
+        } else {
+            state::update(&d, &mut game, s, frame)?;
+        }
 
         let mut dd = d.begin_texture_mode(&rt, &mut render_texture);
         dd.clear_background(Color::BLACK);
 
-        state::draw(&mut dd, &mut game, s, frame)?;
+        if is_in_editor {
+            editor.draw(&mut dd, s, frame);
+        } else {
+            state::draw(&mut dd, &mut game, s, frame)?;
+        }
 
         drop(dd);
 

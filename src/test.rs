@@ -1,7 +1,7 @@
 use crate::{
     dice::{DICE_COUNT, DiceSet, DiceState, MoveType},
     game::{
-        battle::{Action, Battle, PartyDef},
+        battle::{Action, Battle},
         content::Cnt,
     },
 };

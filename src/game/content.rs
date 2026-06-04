@@ -75,6 +75,18 @@ impl<C: Content + 'static> Library<C> {
             .ok_or_else(|| eyre::eyre!("fatal: invalid content key {id:?}"))
             .unwrap()
     }
+
+    pub fn has<K>(&self, id: &K) -> bool
+    where
+        K: Eq + Hash + Debug + ?Sized,
+        ContentId: Borrow<K>,
+    {
+        self.0.contains_key(id)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&ContentId, &C)> {
+        self.0.iter()
+    }
 }
 
 impl<C: Content + 'static, K> Index<&K> for Library<C>

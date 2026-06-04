@@ -719,7 +719,7 @@ impl BattleInterface {
             );
 
             d.draw_text_outline(
-                text_font,
+                s.fnt("default2"),
                 &member.info().name,
                 4.0 + x_offset as f32,
                 444.0 - anim_y as f32,

@@ -1,8 +1,10 @@
 mod attack;
 mod battle;
+mod editor;
 
 pub use attack::AttackInterface;
 pub use battle::BattleInterface;
+pub use editor::EditorInterface;
 
 use raylib::prelude::*;
 

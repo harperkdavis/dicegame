@@ -77,6 +77,14 @@ impl<'a, R: Resource<'a>> Library<R> {
             .unwrap()
     }
 
+    fn has<K>(&self, id: &K) -> bool
+    where
+        K: Eq + Hash + Debug + ?Sized,
+        ResourceId: Borrow<K>,
+    {
+        self.0.contains_key(id)
+    }
+
     fn iter(&self) -> impl Iterator<Item = (&Str, &R)> {
         self.0.iter()
     }
@@ -239,12 +247,32 @@ impl<'audio> Res<'audio> {
         &self.tex[k]
     }
 
+    pub fn has_tex<K>(&self, k: &K) -> bool
+    where
+        K: Eq + Hash + Debug + ?Sized,
+        ResourceId: Borrow<K>,
+    {
+        self.tex.has(k)
+    }
+
+    pub fn tex_iter(&self) -> impl Iterator<Item = (&Str, &Texture2D)> {
+        self.tex.iter()
+    }
+
     pub fn snd<K>(&self, k: &K) -> &Sound<'audio>
     where
         K: Eq + Hash + Debug + ?Sized,
         ResourceId: Borrow<K>,
     {
         &self.snd[k]
+    }
+
+    pub fn has_mus<K>(&self, k: &K) -> bool
+    where
+        K: Eq + Hash + Debug + ?Sized,
+        ResourceId: Borrow<K>,
+    {
+        self.mus.has(k)
     }
 
     pub fn mus_iter(&self) -> impl Iterator<Item = (&Str, &MusicData)> {

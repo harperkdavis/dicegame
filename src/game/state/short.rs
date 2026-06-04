@@ -1,14 +1,14 @@
 use std::collections::VecDeque;
 
-use mlua::{Lua, Thread, ThreadStatus, Value};
+use mlua::Lua;
 use raylib::prelude::RaylibDraw;
 
 use crate::{
     game::{
-        Frame, INPUT_CANCEL, INPUT_CONFIRM, State, Static,
+        Frame, INPUT_CANCEL, INPUT_CONFIRM, Static,
         content::{
             Line,
-            seq::{self, Event, SeqDef},
+            seq::{self, SeqDef},
         },
         script,
         state::{Long, music::MusicController},
