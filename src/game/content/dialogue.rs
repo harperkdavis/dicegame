@@ -114,12 +114,7 @@ pub struct Meta {
 impl TryFrom<&str> for Meta {
     type Error = eyre::Report;
     fn try_from(value: &str) -> eyre::Result<Self> {
-        Meta::deserialize(
-            value
-                .parse::<toml::Table>()
-                .map_err(|e| eyre::eyre!("failed to parse toml table: {e}"))?,
-        )
-        .map_err(|e| eyre::eyre!("invalid metadata: {e}"))
+        toml_edit::de::from_str(value).map_err(|e| eyre::eyre!("failed to deserialize: {e}"))
     }
 }
 
@@ -160,6 +155,66 @@ impl Character {
     }
 }
 
+pub fn draw_dialogue_box(
+    d: &mut impl RaylibDraw,
+    dialogue_elapsed: f64,
+    line_elapsed: Option<f64>,
+) -> i32 {
+    let anim_dialogue = 0.5_f64.powf(dialogue_elapsed * 32.0) * 160.0;
+    let anim_line = line_elapsed.map_or(0.0, |elapsed| 0.5_f64.powf(elapsed * 16.0)) * -4.0;
+    let anim_y = (anim_dialogue + anim_line) as i32;
+
+    d.draw_rectangle(79, 349 + anim_y, 442, 122, Color::WHITE);
+    d.draw_rectangle(80, 350 + anim_y, 440, 120, Color::BLACK);
+
+    anim_y
+}
+
+pub fn draw_choice_box(
+    d: &mut impl RaylibDraw,
+    font: &Font,
+    choice_elapsed: f64,
+    select_elapsed: Option<f64>,
+    choices: &[String],
+    select: usize,
+) {
+    let anim_y = draw_dialogue_box(d, choice_elapsed, select_elapsed);
+
+    let start_y = 350 + 40 + anim_y - (choices.len().saturating_sub(1) as i32 / 2) * 20;
+    let start_x = if choices.len() > 1 {
+        90_i32
+    } else {
+        80 + 440 / 2 - 200 / 2
+    };
+
+    for (i, c) in choices.iter().enumerate() {
+        let x = start_x + (i as i32 % 2) * 220;
+        let y = start_y + (i as i32 / 2) * 40;
+        if select == i {
+            d.draw_rectangle(
+                x + 1,
+                y + 1,
+                198,
+                38,
+                Color::WHITE.alpha(f32::sin(choice_elapsed as f32 * 8.0) * 0.25 + 0.75),
+            );
+        }
+        d.draw_rectangle(x + 2, y + 2, 196, 36, Color::BLACK);
+        d.draw_text_ex(
+            font,
+            c.as_str(),
+            Vector2::new((x + 12) as f32, (y + 12) as f32),
+            16.0,
+            1.0,
+            if select == i {
+                Color::WHITE
+            } else {
+                Color::GRAY
+            },
+        );
+    }
+}
+
 impl Line {
     pub fn len(&self) -> usize {
         self.spans.iter().map(|s| s.text.len()).sum()
@@ -194,12 +249,7 @@ impl Line {
         line_elapsed: Option<f64>,
         delta: f32,
     ) -> bool {
-        let anim_dialogue = 0.5_f64.powf(dialogue_elapsed * 32.0) * 160.0;
-        let anim_line = line_elapsed.map_or(0.0, |elapsed| 0.5_f64.powf(elapsed * 16.0)) * -4.0;
-        let anim_y = (anim_dialogue + anim_line) as i32;
-
-        d.draw_rectangle(79, 349 + anim_y, 442, 122, Color::WHITE);
-        d.draw_rectangle(80, 350 + anim_y, 440, 120, Color::BLACK);
+        let anim_y = draw_dialogue_box(d, dialogue_elapsed, line_elapsed);
 
         if let Some(speaker) = self.meta.speaker.as_deref() {
             /*

@@ -3,7 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use mlua::UserData;
 use serde::{Deserialize, Serialize};
 
-use crate::game::content::Line;
+use crate::{Str, game::content::Line};
 
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -14,12 +14,12 @@ pub enum Event {
 
     GetFlag(String),
     SetFlag(String, i64),
-}
 
-impl Event {
-    pub fn is_non_blocking(&self) -> bool {
-        matches!(self, Self::GetFlag(_) | Self::SetFlag(_, _))
-    }
+    SetMusic(Option<Str>),
+    PlaySound(Str),
+    PlaySoundAndWait(Str, Option<f32>),
+
+    SetDirection(i64),
 }
 
 impl UserData for Event {}
@@ -86,14 +86,14 @@ impl SeqDef {
             .then(|| format!("{}/conv", self.unique_id(room)))
     }
 
-    pub fn into_lua_code(&self, room: &str) -> String {
+    pub fn get_lua_code(&self, room: &str) -> String {
         match self {
             Self::Simple(v) => match &v[..] {
                 [] => "".to_string(),
                 [one] => create_line(one.as_str()),
                 many => create_multi_interact(many, &self.conversation_flag(room).unwrap()),
             },
-            Self::Complex(s) => s.to_owned(),
+            Self::Complex(s) => s.replace("%namespace%", &self.unique_id(room)).to_owned(),
         }
     }
 }

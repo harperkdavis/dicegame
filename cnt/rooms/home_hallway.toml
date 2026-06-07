@@ -1,0 +1,149 @@
+room = "home_hallway"
+music = "002_Morning_Evening"
+background = "background/room_home_hallway"
+
+[layout]
+left_x = 0
+right_x = 1280
+top_y = 0
+bottom_y = 480
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_700"
+r = { x = 1031, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_701"
+r = { x = 911, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_702"
+r = { x = 791, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_703"
+r = { x = 671, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_704"
+r = { x = 551, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_705"
+r = { x = 431, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_706"
+r = { x = 311, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_room_707"
+r = { x = 191, y = 192, w = 19, h = 8 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 165, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 285, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 405, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 525, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 645, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 765, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 885, y = 185, w = 30, h = 55 }
+
+[[layout.objects]]
+sprite = "env/home_hallway_door"
+r = { x = 1005, y = 185, w = 30, h = 55 }
+
+[[layout.collision]]
+r = { x = 80, y = 220, w = 80, h = 20 }
+
+[[layout.collision]]
+r = { x = 200, y = 220, w = 1020, h = 20 }
+
+[[layout.collision]]
+r = { x = 1200, y = 240, w = 20, h = 20 }
+
+[[layout.collision]]
+r = { x = 1200, y = 300, w = 20, h = 60 }
+
+[[layout.collision]]
+r = { x = 80, y = 340, w = 1120, h = 20 }
+
+[[layout.collision]]
+r = { x = 80, y = 240, w = 20, h = 100 }
+
+[[layout.triggers]]
+seq = ["(I almost never see my neighbors.)"]
+r = { x = 283, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(It's locked.)"]
+r = { x = 403, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(It's locked.)"]
+r = { x = 523, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(It's locked.)"]
+r = { x = 643, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(It's locked.)"]
+r = { x = 763, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(It's locked.)"]
+r = { x = 883, y = 224, w = 34, h = 18 }
+
+[[layout.triggers]]
+seq = ["(Just like the others, it's locked.)"]
+r = { x = 1003, y = 224, w = 34, h = 18 }
+
+[[layout.transitions]]
+name = "from_home"
+enter_dir = "South"
+default = true
+is_save_point = false
+r = { x = 160, y = 240, w = 40, h = 20 }
+
+[[layout.transitions]]
+name = "to_home"
+enter_dir = "North"
+to_room = "home"
+to_transition = "from_hallway"
+default = false
+is_save_point = false
+r = { x = 160, y = 220, w = 40, h = 20 }
+
+[[layout.transitions]]
+name = "to_elevator"
+to_room = "home_elevator"
+to_transition = "from_hallway"
+default = false
+is_save_point = false
+r = { x = 1200, y = 260, w = 20, h = 40 }
+
+[[layout.transitions]]
+name = "from_elevator"
+default = false
+is_save_point = false
+r = { x = 1180, y = 260, w = 20, h = 40 }

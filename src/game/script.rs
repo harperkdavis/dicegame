@@ -5,7 +5,7 @@ use crate::game::content::{
     seq::{self, SeqDef},
 };
 
-pub fn create_context<'a>() -> mlua::Result<Lua> {
+pub fn create_context() -> mlua::Result<Lua> {
     let lua = Lua::new();
     let globals = lua.globals();
 
@@ -38,6 +38,30 @@ pub fn create_context<'a>() -> mlua::Result<Lua> {
         lua.create_function(|_, seconds: f32| Ok(seq::Event::Wait(seconds)))?,
     )?;
 
+    globals.set(
+        "__make_set_music",
+        lua.create_function(|_, track: Option<String>| {
+            Ok(seq::Event::SetMusic(track.map(|s| s.into())))
+        })?,
+    )?;
+
+    globals.set(
+        "__make_play_sound",
+        lua.create_function(|_, sound: String| Ok(seq::Event::PlaySound(sound.into())))?,
+    )?;
+
+    globals.set(
+        "__make_play_sound_and_wait",
+        lua.create_function(|_, (sound, wait_for): (String, Option<f32>)| {
+            Ok(seq::Event::PlaySoundAndWait(sound.into(), wait_for))
+        })?,
+    )?;
+
+    globals.set(
+        "__make_set_direction",
+        lua.create_function(|_, direction: i64| Ok(seq::Event::SetDirection(direction)))?,
+    )?;
+
     let bootstrap = r#"
         function flag(id)
             return coroutine.yield(__make_get_flag(id))
@@ -58,6 +82,26 @@ pub fn create_context<'a>() -> mlua::Result<Lua> {
         function wait(seconds)
             return coroutine.yield(__make_wait(seconds))
         end
+
+        function set_music(music)
+            return coroutine.yield(__make_set_music(music))
+        end
+
+        function stop_music()
+            set_music(nil)
+        end
+
+        function play_sound(sound)
+            return coroutine.yield(__make_play_sound(sound))
+        end
+
+        function play_sound_and_wait(sound, time)
+            return coroutine.yield(__make_play_sound_and_wait(sound, time))
+        end
+
+        function set_direction(dir)
+            return coroutine.yield(__make_set_direction(dir))
+        end
     "#;
 
     lua.load(bootstrap).exec()?;
@@ -66,6 +110,6 @@ pub fn create_context<'a>() -> mlua::Result<Lua> {
 }
 
 pub fn load_sequence(room: &str, seq_def: &SeqDef, lua: &Lua) -> mlua::Result<mlua::Function> {
-    let lua_code = seq_def.into_lua_code(room);
+    let lua_code = seq_def.get_lua_code(room);
     lua.load(lua_code).into_function()
 }

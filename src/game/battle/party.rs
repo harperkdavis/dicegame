@@ -24,8 +24,8 @@ impl Content for PartyDef {
     type Asset = PartyDefAsset;
 
     fn load(_: Self::Context, res: &crate::res::Res, data: &'static [u8]) -> eyre::Result<Self> {
-        let def: Self =
-            toml::from_slice(data).map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
+        let def: Self = toml_edit::de::from_slice(data)
+            .map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
 
         // will crash if sprite is not found during loading rather than runtime.
         res.tex(def.sprite.as_str());

@@ -20,8 +20,8 @@ impl Content for ItemDef {
     type Asset = ItemDefAsset;
 
     fn load(_: Self::Context, res: &crate::res::Res, data: &'static [u8]) -> eyre::Result<Self> {
-        let item_def: Self =
-            toml::from_slice(data).map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
+        let item_def: Self = toml_edit::de::from_slice(data)
+            .map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
 
         // will crash if sprite is not found during loading rather than runtime.
         res.tex(item_def.sprite.as_str());

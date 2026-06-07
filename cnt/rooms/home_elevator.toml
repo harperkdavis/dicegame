@@ -1,0 +1,76 @@
+room = "home_elevator"
+music = "002_Morning_Evening"
+background = "background/room_home_elevator"
+
+[layout]
+left_x = 0
+right_x = 0
+top_y = 0
+bottom_y = 0
+
+[[layout.objects]]
+sprite = "env/home_elevator_bulletin"
+r = { x = 350, y = 178, w = 61, h = 42 }
+
+[[layout.objects]]
+sprite = "env/elevator"
+r = { x = 244, y = 159, w = 79, h = 81 }
+
+[[layout.collision]]
+r = { x = 160, y = 220, w = 20, h = 40 }
+
+[[layout.collision]]
+r = { x = 180, y = 220, w = 60, h = 20 }
+
+[[layout.collision]]
+r = { x = 320, y = 220, w = 160, h = 20 }
+
+[[layout.collision]]
+r = { x = 460, y = 240, w = 20, h = 120 }
+
+[[layout.collision]]
+r = { x = 160, y = 340, w = 300, h = 20 }
+
+[[layout.collision]]
+r = { x = 160, y = 300, w = 20, h = 40 }
+
+[[layout.triggers]]
+seq = ["""
+("How to Submit a Maintenance Request")
+("Fire Safety Guide")
+(and one brightly colored advertisement for a band called "Men With Tools")
+(They must live in this building.)
+"""]
+r = { x = 348, y = 224, w = 65, h = 18 }
+
+[[layout.transitions]]
+name = "from_hallway"
+enter_dir = "East"
+default = true
+is_save_point = false
+r = { x = 180, y = 260, w = 20, h = 40 }
+
+[[layout.transitions]]
+name = "to_hallway"
+enter_dir = "West"
+to_room = "home_hallway"
+to_transition = "from_elevator"
+default = false
+is_save_point = false
+r = { x = 160, y = 260, w = 20, h = 40 }
+
+[[layout.transitions]]
+name = "from_elevator_ride"
+enter_dir = "South"
+default = false
+is_save_point = false
+r = { x = 240, y = 240, w = 80, h = 20 }
+
+[[layout.transitions]]
+name = "to_elevator_ride"
+enter_dir = "North"
+to_room = "elevator_ride"
+to_transition = "enter"
+default = false
+is_save_point = false
+r = { x = 240, y = 220, w = 80, h = 20 }

@@ -1,5 +1,12 @@
-use std::fs;
+use std::{
+    collections::HashMap,
+    fs,
+    num::NonZeroU32,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
+use eyre::OptionExt;
 use raylib::{
     camera::Camera2D,
     color::Color,
@@ -13,13 +20,14 @@ use strum::IntoStaticStr;
 use crate::{
     Str,
     game::{
-        Frame, Static,
+        Frame, State, Static,
         content::{
             Room,
-            room::{Layer, LayerItem, Object},
+            room::{Layer, LayerItem, Object, Rect},
         },
+        state::{self},
     },
-    util::TextOutline,
+    util::{Direction, TextOutline},
 };
 
 const MAX_RESULTS: usize = 27;
@@ -31,6 +39,11 @@ const COMMAND_LOAD_ROOM: &str = "l";
 const COMMAND_LOAD_TEXTURE: &str = "t";
 const COMMAND_SET_BACKGROUND: &str = "bg";
 const COMMAND_SET_MUSIC: &str = "mus";
+const COMMAND_SAVE_ROOM: &str = "w";
+const COMMAND_READ_ROOM: &str = "r";
+const COMMAND_SAVE_BACKUP: &str = "wback";
+const COMMAND_LOAD_BACKUP: &str = "rback";
+const COMMAND_LOAD_OVERWRITTEN: &str = "rover";
 
 #[derive(Clone, Copy, IntoStaticStr, PartialEq, Eq)]
 #[repr(usize)]
@@ -63,6 +76,7 @@ struct RoomEditor {
 
     mouse_pos: (i32, i32),
     start_pos: Option<(i32, i32)>,
+    preview_rect: Option<Rect>,
 
     selected: Option<LayerItem>,
     hover: Option<LayerItem>,
@@ -74,8 +88,8 @@ impl RoomEditor {
             id: id.to_owned(),
             room,
 
-            camera_x: 0.0,
-            camera_y: 0.0,
+            camera_x: 320.0,
+            camera_y: 240.0,
 
             layer: Layer::Object,
             mode: Mode::Normal,
@@ -87,13 +101,26 @@ impl RoomEditor {
             mouse_pos: (0, 0),
             start_pos: None,
 
+            preview_rect: None,
+
             selected: None,
             hover: None,
         }
     }
 
+    pub fn path(&self) -> PathBuf {
+        let mut path = PathBuf::from("cnt/rooms");
+        path.push(&self.id);
+        path.set_extension("toml");
+        path
+    }
+
     pub fn new_empty(id: &str) -> Self {
-        Self::new(id, Room::default())
+        let new = Room {
+            room: id.to_owned(),
+            ..Default::default()
+        };
+        Self::new(id, new)
     }
 
     pub fn load(id: &str, s: Static) -> Self {
@@ -165,6 +192,14 @@ impl RoomEditor {
                         item,
                     }),
             )
+            .chain(
+                room.layout
+                    .overlapping_transitions(mx, my)
+                    .map(|item| LayerItem {
+                        layer: Layer::Transition,
+                        item,
+                    }),
+            )
             .collect::<Vec<_>>();
 
         if candidates.is_empty() {
@@ -220,14 +255,14 @@ impl RoomEditor {
             self.mode = Mode::Normal;
             self.start_pos = None;
             self.selected = None;
-            self.room.re_sort_y();
+            self.room.refresh(s);
         }
+
         // x: delete selected
         if d.is_key_pressed(KeyboardKey::KEY_X)
-            && self.mode == Mode::Normal
+            && matches!(self.mode, Mode::Normal | Mode::Add | Mode::MultiAdd)
             && let Some(selected) = self.selected
         {
-            // TODO: remove
             self.room.remove(selected);
             self.start_pos = None;
             self.selected = None;
@@ -235,6 +270,7 @@ impl RoomEditor {
         // a: enter add mode (allow placing texture)
         if d.is_key_pressed(KeyboardKey::KEY_A) {
             if palette.texture.is_some() {
+                self.start_pos = None;
                 self.mode = Mode::Add;
             } else {
                 self.result = Err("add error: no texture selected!".to_string());
@@ -243,18 +279,30 @@ impl RoomEditor {
         // i: enter multi-add mode (allow placing multiple of whatever it is)
         if d.is_key_pressed(KeyboardKey::KEY_I) {
             if palette.texture.is_some() {
+                self.start_pos = None;
                 self.mode = Mode::MultiAdd;
             } else {
                 self.result = Err("add error: no texture selected!".to_string());
             }
         }
 
+        // g: translate selected object
         if d.is_key_pressed(KeyboardKey::KEY_G) {
             if is_shift {
                 self.grid = !self.grid;
             } else if self.selected.is_some() {
-                // TODO: translate
                 self.mode = Mode::Translate;
+                self.start_pos = Some(self.mouse_pos);
+            }
+        }
+
+        // s: scale selected object
+        if d.is_key_pressed(KeyboardKey::KEY_S) {
+            if is_shift {
+                self.room
+                    .add_save_point(self.mouse_pos, self.id.as_str().into());
+            } else if self.selected.is_some() {
+                self.mode = Mode::Scale;
                 self.start_pos = Some(self.mouse_pos);
             }
         }
@@ -264,6 +312,19 @@ impl RoomEditor {
             self.layer = Layer::Object;
             if is_shift && let Some(selected) = self.selected {
                 // auto-object
+                if let Some(sprite) = &palette.texture {
+                    let rect = self.room.get_rect(selected);
+                    let x = rect.midpoint().0;
+                    let y = rect.bottom_y();
+                    let tex = s.tex(sprite);
+                    self.room.add_object(Object::new_from_texture(
+                        Self::get_place_pos((x, y), tex.width, tex.height),
+                        sprite.clone(),
+                        s,
+                    ));
+                } else {
+                    self.result = Err("auto-object error: no texture selected!".to_string());
+                }
             }
         }
         // c: switch to collision layer
@@ -306,6 +367,102 @@ impl RoomEditor {
                 });
             }
         }
+        // n: switch to transition layer
+        if d.is_key_pressed(KeyboardKey::KEY_N) {
+            self.layer = Layer::Transition;
+        }
+
+        if let Some(selected) = self.selected.as_ref()
+            && selected.layer == Layer::Transition
+            && d.is_key_pressed(KeyboardKey::KEY_R)
+        {
+            let transition = &mut self.room.layout.transitions[selected.item];
+
+            if let Some(ed) = transition.enter_dir {
+                transition.enter_dir = Some(ed.next());
+            } else {
+                transition.enter_dir = Some(Direction::default());
+            }
+        }
+
+        match self.mode {
+            Mode::Add | Mode::MultiAdd => {
+                if matches!(
+                    self.layer,
+                    Layer::Trigger | Layer::Collision | Layer::Transition
+                ) {
+                    if let Some(start_pos) = self.start_pos {
+                        let end_pos = if self.using_grid {
+                            (
+                                self.mouse_pos.0 + GRID_SIZE_I,
+                                self.mouse_pos.1 + GRID_SIZE_I,
+                            )
+                        } else {
+                            self.mouse_pos
+                        };
+
+                        self.preview_rect = Some(Rect::from_points(start_pos, end_pos));
+                    } else {
+                        self.preview_rect = Some(Rect {
+                            x: self.mouse_pos.0,
+                            y: self.mouse_pos.1,
+                            w: NonZeroU32::new(GRID_SIZE_I as u32).unwrap(),
+                            h: NonZeroU32::new(GRID_SIZE_I as u32).unwrap(),
+                        });
+                    }
+                }
+            }
+            Mode::Translate => {
+                let (sx, sy) = self.start_pos.unwrap();
+                let (mx, my) = self.mouse_pos;
+                let (tx, ty) = (mx - sx, my - sy);
+                let li = self.selected.unwrap();
+                let mut rect = self.room.get_rect(li);
+                rect.x += tx;
+                rect.y += ty;
+
+                self.preview_rect = Some(rect);
+            }
+            Mode::Scale => {
+                let (sx, sy) = self.start_pos.unwrap();
+                let (mx, my) = self.mouse_pos;
+                let (tx, ty) = (mx - sx, my - sy);
+                let li = self.selected.unwrap();
+                let rect = self.room.get_rect(li);
+                let (rx, ry) = rect.midpoint();
+
+                let mut tl = (rect.x, rect.y);
+                let mut br = (
+                    rect.x + u32::from(rect.w).cast_signed(),
+                    rect.y + u32::from(rect.h).cast_signed(),
+                );
+
+                if is_shift {
+                    let tx = tx / 2;
+                    let ty = ty / 2;
+
+                    tl.0 -= tx;
+                    br.0 += tx;
+
+                    tl.1 -= ty;
+                    br.1 += ty;
+                } else {
+                    if sx < rx {
+                        tl.0 += tx;
+                    } else {
+                        br.0 += tx;
+                    }
+                    if sy < ry {
+                        tl.1 += ty;
+                    } else {
+                        br.1 += ty;
+                    }
+                }
+
+                self.preview_rect = Some(Rect::from_points(tl, br));
+            }
+            _ => (),
+        }
 
         if d.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
             // depends on mode first
@@ -315,7 +472,7 @@ impl RoomEditor {
                         self.selected = Some(hover);
                     } else {
                         self.selected = None;
-                        self.room.re_sort_y();
+                        self.room.refresh(s);
                     }
                 }
                 Mode::MultiAdd | Mode::Add => {
@@ -329,7 +486,14 @@ impl RoomEditor {
                                 s,
                             )))
                         }
-                        _ => None,
+                        Layer::Collision | Layer::Trigger | Layer::Transition => {
+                            if self.start_pos.is_some() {
+                                Some(self.room.add_rect(self.preview_rect.unwrap(), self.layer))
+                            } else {
+                                self.start_pos = Some(self.mouse_pos);
+                                None
+                            }
+                        }
                     };
 
                     if let Some(added) = added {
@@ -337,29 +501,44 @@ impl RoomEditor {
                             layer: self.layer,
                             item: added,
                         });
+                        self.start_pos = None;
                         // add mode automatically deselects
                         if self.mode == Mode::Add {
                             self.mode = Mode::Normal;
                         }
                     }
                 }
-                Mode::Translate => {}
-                _ => (),
+                Mode::Translate | Mode::Scale => {
+                    let li = self.selected.unwrap();
+
+                    *self.room.get_rect_mut(li) = self.preview_rect.unwrap();
+                    self.room.refresh(s);
+
+                    self.mode = Mode::Normal;
+                }
             }
         }
 
         // 0: move camera back to center
         if d.is_key_pressed(KeyboardKey::KEY_ZERO) {
             self.result = Ok("reset camera.".to_string());
-            self.camera_x = 0.0;
-            self.camera_y = 0.0;
+            self.camera_x = 320.0;
+            self.camera_y = 240.0;
         }
 
         self.camera_x += frame.input_x * frame.delta * 1000.0;
         self.camera_y += frame.input_y * frame.delta * 1000.0;
+
+        let scroll = -d.get_mouse_wheel_move() * frame.delta * 400_000.0;
+
+        if is_shift {
+            self.camera_x += scroll;
+        } else {
+            self.camera_y += scroll;
+        }
     }
 
-    pub fn draw(&self, d: &mut impl RaylibDraw, palette: &Palette, s: Static, frame: Frame) {
+    pub fn draw(&self, d: &mut impl RaylibDraw, palette: &Palette, s: Static, _frame: Frame) {
         let editor_font = s.fnt("nokia_15");
 
         let cam = self.get_camera();
@@ -389,8 +568,12 @@ impl RoomEditor {
         }
 
         let mut dd = d.begin_mode2D(cam);
-        self.room
-            .draw(&mut dd, s, Some((self.hover, self.selected)));
+        self.room.draw(
+            &mut dd,
+            s,
+            &HashMap::new(),
+            Some((self.hover, self.selected)),
+        );
 
         match self.mode {
             // draw preview
@@ -409,19 +592,31 @@ impl RoomEditor {
                         Color::BLACK,
                     );
                 }
-                _ => (),
+                Layer::Collision | Layer::Trigger | Layer::Transition => {
+                    let r = self.preview_rect.unwrap();
+                    let color = match self.layer {
+                        Layer::Collision => Color::LIME,
+                        Layer::Trigger => Color::BLUE,
+                        Layer::Transition => Color::RED,
+                        _ => Color::MAGENTA,
+                    }
+                    .alpha(0.25);
+
+                    dd.draw_rectangle(
+                        r.x,
+                        r.y,
+                        u32::from(r.w).cast_signed(),
+                        u32::from(r.h).cast_signed(),
+                        color,
+                    );
+                }
             },
-            Mode::Translate => {
+            Mode::Translate | Mode::Scale => {
                 let li = self.selected.unwrap();
-                let mut rect = match li.layer {
-                    Layer::Object => self.room.layout.objects[li.item].r,
-                    Layer::Collision => self.room.layout.collision[li.item].r,
-                    Layer::Trigger => self.room.layout.triggers[li.item].r,
-                };
+                let rect = self.preview_rect.unwrap();
 
                 if li.layer == Layer::Object {
                     let tex = s.tex(&self.room.layout.objects[li.item].sprite);
-                    (rect.x, rect.y) = Self::get_place_pos(self.mouse_pos, tex.width, tex.height);
                     dd.draw_texture_pro(
                         tex,
                         Rectangle::new(0.0, 0.0, tex.width as f32, tex.height as f32),
@@ -430,9 +625,6 @@ impl RoomEditor {
                         0.0,
                         Color::WHITE.alpha(0.5),
                     );
-                } else {
-                    rect.x = self.mouse_pos.0;
-                    rect.y = self.mouse_pos.1;
                 }
 
                 dd.draw_rectangle_lines(
@@ -457,6 +649,7 @@ impl RoomEditor {
                 Layer::Object => Color::DARKMAGENTA,
                 Layer::Collision => Color::GREEN,
                 Layer::Trigger => Color::DARKBLUE,
+                Layer::Transition => Color::DARKRED,
             },
         );
         d.draw_text_outline(
@@ -507,7 +700,8 @@ impl Persistent {
     const PATH: &str = "tmp/editor.toml";
 
     fn write(&self) -> eyre::Result<()> {
-        fs::write(Self::PATH, toml::to_string(self)?)?;
+        let _ = fs::create_dir("tmp/");
+        fs::write(Self::PATH, toml_edit::ser::to_string(self)?)?;
         Ok(())
     }
 
@@ -520,7 +714,7 @@ impl Persistent {
     fn load_or_default() -> eyre::Result<Self> {
         if let Some(p) = fs::read_to_string(Self::PATH)
             .ok()
-            .and_then(|s| toml::from_str::<Self>(&s).ok())
+            .and_then(|s| toml_edit::de::from_str::<Self>(&s).ok())
         {
             Ok(p)
         } else {
@@ -531,7 +725,7 @@ impl Persistent {
     }
 }
 
-pub struct EditorInterface {
+pub struct EditorInterface<'a> {
     persistent: Persistent,
 
     command: Option<String>,
@@ -544,9 +738,11 @@ pub struct EditorInterface {
 
     room: Option<RoomEditor>,
     palette: Palette,
+
+    playtesting: Option<State<'a>>,
 }
 
-impl EditorInterface {
+impl<'a> EditorInterface<'a> {
     pub fn new(s: Static) -> eyre::Result<Self> {
         let persistent = Persistent::load_or_default()?;
         let room = persistent
@@ -570,18 +766,24 @@ impl EditorInterface {
 
             room,
             palette: Palette::default(),
+
+            playtesting: None,
         })
     }
-}
 
-impl EditorInterface {
     pub fn update(
         &mut self,
         d: &mut RaylibDrawHandle,
-        s: Static,
+        s: Static<'a>,
         frame: Frame,
     ) -> eyre::Result<()> {
-        if let Some(command) = self.command.as_mut() {
+        if let Some(state) = self.playtesting.as_mut() {
+            if d.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
+                self.playtesting = None;
+            } else {
+                state::update(d, state, s, frame)?;
+            }
+        } else if let Some(command) = self.command.as_mut() {
             let prev_command = command.clone();
             if let Some(c) = d.get_char_pressed() {
                 command.push(c);
@@ -650,9 +852,123 @@ impl EditorInterface {
                         c => Err(format!("invalid command: {c}")),
                     }
                 } else {
-                    Err(format!(
-                        "did not provide any arguments for command: {command}"
-                    ))
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis();
+                    match command.as_str() {
+                        COMMAND_SAVE_ROOM
+                        | COMMAND_READ_ROOM
+                        | COMMAND_SAVE_BACKUP
+                        | COMMAND_LOAD_BACKUP
+                        | COMMAND_LOAD_OVERWRITTEN => {
+                            if let Some(room) = &self.room {
+                                let id = room.id.clone();
+                                let path = room.path();
+
+                                // save a copy of the file we are overwriting
+                                let last_overwritten_path =
+                                    self.persistent.last_overwritten.clone();
+                                if matches!(command.as_str(), COMMAND_SAVE_ROOM)
+                                    && let Ok(prev_file) = fs::read_to_string(&path)
+                                {
+                                    let overwritten_path =
+                                        format!("tmp/{id}.{now:x}.overwritten.toml");
+                                    if fs::write(&overwritten_path, prev_file).is_ok() {
+                                        self.persistent.edit(|e| {
+                                            e.last_overwritten = Some(overwritten_path.clone())
+                                        })?;
+                                    }
+                                }
+
+                                // or, save a backup before we replace the current working room
+                                let last_backup_path = self.persistent.last_backup.clone();
+                                if matches!(
+                                    command.as_str(),
+                                    COMMAND_READ_ROOM
+                                        | COMMAND_LOAD_BACKUP
+                                        | COMMAND_LOAD_OVERWRITTEN
+                                ) {
+                                    let backup_path = format!("tmp/{id}.{now:x}.backup.toml");
+                                    if room
+                                        .room
+                                        .ser()
+                                        .map_err(|_| ())
+                                        .and_then(|s| fs::write(&backup_path, s).map_err(|_| ()))
+                                        .is_ok()
+                                    {
+                                        self.persistent
+                                            .edit(|e| e.last_backup = Some(backup_path.clone()))?;
+                                    }
+                                }
+
+                                // save commands
+                                match command.as_str() {
+                                    COMMAND_SAVE_ROOM | COMMAND_SAVE_BACKUP => {
+                                        let save_to = if command == COMMAND_SAVE_ROOM {
+                                            path
+                                        } else {
+                                            PathBuf::from(format!("tmp/{now:x}.backup.toml"))
+                                        };
+
+                                        match room
+                                            .room
+                                            .ser()
+                                            .map_err(|e| eyre::eyre!("serialization error: {e}"))
+                                            .and_then(|s| {
+                                                fs::write(&save_to, &s)
+                                                    .map(|_| s.len())
+                                                    .map_err(|e| eyre::eyre!("write error: {e}"))
+                                            }) {
+                                            Ok(b) => Ok(format!(
+                                                "wrote {} at {save_to:?} ({b} bytes)",
+                                                room.id
+                                            )),
+                                            Err(e) => Err(e.to_string()),
+                                        }
+                                    }
+                                    COMMAND_READ_ROOM
+                                    | COMMAND_LOAD_BACKUP
+                                    | COMMAND_LOAD_OVERWRITTEN => {
+                                        let read_from = match command.as_str() {
+                                            COMMAND_READ_ROOM => {
+                                                fs::exists(&path)?.then(|| path.clone())
+                                            }
+                                            COMMAND_LOAD_BACKUP => {
+                                                last_backup_path.map(PathBuf::from)
+                                            }
+                                            COMMAND_LOAD_OVERWRITTEN => {
+                                                last_overwritten_path.map(PathBuf::from)
+                                            }
+                                            _ => None,
+                                        };
+
+                                        match read_from
+                                            .ok_or_eyre("could not obtain read location")
+                                            .and_then(|path| {
+                                                fs::read_to_string(&path)
+                                                    .map_err(|e| eyre::eyre!("read error: {e}"))
+                                            })
+                                            .and_then(|s| {
+                                                toml_edit::de::from_str::<Room>(&s).map_err(|e| {
+                                                    eyre::eyre!("deserialization error: {e}")
+                                                })
+                                            }) {
+                                            Ok(room) => {
+                                                self.room = Some(RoomEditor::new(&id, room));
+                                                Ok(format!("loaded {} from {path:?}.", id))
+                                            }
+                                            Err(e) => Err(e.to_string()),
+                                        }
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            } else {
+                                Err("no room loaded!".to_string())
+                            }
+                        }
+                        _ => Err(format!("invalid or malformed command: {command}")),
+                    }
                 };
             }
 
@@ -739,10 +1055,23 @@ impl EditorInterface {
                         self.search_results = None;
                     }
                 } else {
-                    self.validated_command = None;
+                    self.validated_command = match new_command.as_str() {
+                        COMMAND_SAVE_ROOM
+                        | COMMAND_READ_ROOM
+                        | COMMAND_SAVE_BACKUP
+                        | COMMAND_LOAD_BACKUP
+                        | COMMAND_LOAD_OVERWRITTEN => Some(Ok(new_command.clone())),
+                        _ => None,
+                    };
                     self.search_results = None;
                 }
             }
+        } else if d.is_key_pressed(KeyboardKey::KEY_ENTER)
+            && let Some(room) = self.room.as_ref()
+        {
+            let (long, short) = state::load_playtest(room.room.clone(), s)?;
+            let state = State { long, short };
+            self.playtesting = Some(state);
         } else if d.is_key_pressed(KeyboardKey::KEY_SLASH) {
             self.command = Some("t ".to_string());
             self.autocomplete_option = 0;
@@ -756,12 +1085,24 @@ impl EditorInterface {
         Ok(())
     }
 
-    pub fn draw(&self, d: &mut impl RaylibDraw, s: Static, frame: Frame) {
+    pub fn draw(&mut self, d: &mut impl RaylibDraw, s: Static, frame: Frame) -> eyre::Result<()> {
+        if let Some(playtesting) = self.playtesting.as_mut() {
+            state::draw(d, playtesting, s, frame)?;
+            return Ok(());
+        }
+
         let editor_font = s.fnt("nokia_15");
         if let Some(re) = self.room.as_ref() {
             re.draw(d, &self.palette, s, frame);
         } else {
-            d.draw_text("(no room loaded)", 100, 100, 15, Color::GRAY);
+            d.draw_text_ex(
+                editor_font,
+                "(no room loaded)",
+                Vector2::new(100.0, 100.0),
+                15.0,
+                0.0,
+                Color::GRAY,
+            );
         }
 
         if let Some(command) = self.command.as_deref() {
@@ -825,5 +1166,7 @@ impl EditorInterface {
                 Color::BLACK,
             );
         }
+
+        Ok(())
     }
 }

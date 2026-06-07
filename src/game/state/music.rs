@@ -87,6 +87,10 @@ impl<'a> MusicController<'a> {
         MAX_MUSIC_VOLUME * self.music_volume
     }
 
+    pub fn set_current_music(&mut self, track: Option<Str>) {
+        self.current_area_music = track.unwrap_or(EMPTY_TRACK.into());
+    }
+
     pub fn update(
         &mut self,
         delta: f32,

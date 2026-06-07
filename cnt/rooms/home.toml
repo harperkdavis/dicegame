@@ -1,64 +1,129 @@
-# Set room name
 room = "home"
-background = "background/city_1"
-enemy_chance = 0.2
+music = "002_Morning_Evening"
+enemy_chance = 0.0
+background = "background/room_home"
 
 [layout]
-width = 256
-height = 256
+left_x = 0
+right_x = 640
+top_y = 0
+bottom_y = 480
 
-objects = []
-collision = [{ r = { x = 100, y = 100, w = 50, h = 50 } }]
+[[layout.objects]]
+sprite = "env/home_plant"
+r = { x = 444, y = 114, w = 9, h = 21 }
+
+[[layout.objects]]
+sprite = "env/home_poster"
+r = { x = 328, y = 103, w = 25, h = 37 }
+
+[[layout.objects]]
+sprite = "env/home_nightstand"
+r = { x = 208, y = 195, w = 18, h = 42 }
+
+[[layout.objects]]
+sprite = "env/home_wardrobe"
+r = { x = 241, y = 172, w = 38, h = 68 }
+
+[[layout.objects]]
+sprite = "env/home_bed"
+r = { x = 142, y = 205, w = 62, h = 90 }
+
+[[layout.objects]]
+sprite = "env/home_chair"
+r = { x = 431, y = 278, w = 19, h = 42 }
+
+[[layout.objects]]
+sprite = "env/home_table"
+r = { x = 461, y = 242, w = 39, h = 98 }
+
+[[layout.collision]]
+r = { x = 300, y = 140, w = 220, h = 20 }
+
+[[layout.collision]]
+r = { x = 280, y = 140, w = 20, h = 80 }
+
+[[layout.collision]]
+r = { x = 120, y = 200, w = 160, h = 20 }
+
+[[layout.collision]]
+r = { x = 120, y = 220, w = 20, h = 120 }
+
+[[layout.collision]]
+r = { x = 120, y = 340, w = 220, h = 20 }
+
+[[layout.collision]]
+r = { x = 320, y = 360, w = 80, h = 20 }
+
+[[layout.collision]]
+r = { x = 380, y = 340, w = 140, h = 20 }
+
+[[layout.collision]]
+r = { x = 500, y = 160, w = 20, h = 180 }
+
+[[layout.collision]]
+r = { x = 459, y = 244, w = 43, h = 98 }
+
+[[layout.collision]]
+r = { x = 429, y = 304, w = 23, h = 18 }
+
+[[layout.collision]]
+r = { x = 203, y = 204, w = 79, h = 34 }
+
+[[layout.collision]]
+r = { x = 140, y = 219, w = 66, h = 78 }
 
 [[layout.triggers]]
-r = { x = 100, y = 200, w = 40, h = 40 }
-seq = [
-    """
-(every morning, before I go to sleep, my mind always drifts to the same fantasy.)
-(i imagine myself, in my bed...)
-(a metal handlebar drops from the sky, attached to a cable that extends further than i can see.)
-(i slowly sit up and grab it with both hands.)
-(the metal is cold, with perforations that dig into my skin.)
-(it slowly rises, accelerating.)
-(my arms are slowly extended until they hold my weight.)
-(the constant pull of my body becomes more apparent.)
-(the comforter slips off my feet as I rise out of my bed.)
-(my legs hang under me.)
-(i pass right through the ceiling.)
-(i begin to rise faster and faster.)
-(i don't know what the cable is attached to...)
-(... but i hold on for dear life as the city shrinks below me.)
-(my arms are sore within minutes.)
-(after a while, it starts to get cold.)
-(the numbness starts at my fingertips.)
-(and spreads through my hands.)
-(it becomes harder to breathe.)
-(i start to suffocate.)
-(my hands finally falter, and i lose grip of the handlebars.)
-(and as i fall down to the earth, for a brief moment...)
-(i take comfort in the fact that my fate has been decided.)
-(and then i fall asleep.)
-{ speaker = "enn" } ...
-{ speaker = "enn" } Shit, sorry, I was just thinking.
-{ speaker = "enn" } What did you ask me again?
-{ speaker = "enn" } ...
-{ speaker = "enn" } I mean, I guess I could talk about it...
-{ speaker = "enn" } ... It's just been a long damn time.
-{ speaker = "enn" } I think I woke up around 8.""",
-    "Sorry for talking too much.",
-]
+seq = ["(I used to like this view.)"]
+r = { x = 440, y = 140, w = 40, h = 20 }
 
 [[layout.triggers]]
-r = { x = 200, y = 100, w = 50, h = 50 }
+seq = ["(It's my bed.)"]
+r = { x = 140, y = 219, w = 66, h = 78 }
+
+[[layout.triggers]]
+seq = ["(I don't feel like putting real clothes on.)"]
+r = { x = 239, y = 204, w = 42, h = 35 }
+
+[[layout.triggers]]
+seq = ["(A poster a friend gave me as a gift.)"]
+r = { x = 320, y = 140, w = 40, h = 20 }
+
+[[layout.triggers]]
 seq = """
-write([[{ speaker = "enn", face = "sad" } Uh, how did you get over here?
-{ speaker = "enn", face = "sad" } XX_XX_XX_XX_XX_XX_
-Is it really that easy?]])
-wait(0.5)
-write([[{ group_every = true } YOU SEE IT IS ACTUALLY VERY SIMPLE. I JUST. DID THIS.
-{ group_every = true } DID YOU JUST SEE THAT LIKE WOW]])
-wait(1.0)
-write("Oh... I see.")
-"""
+local q = flag("quest/mail")
 
-[layout.transitions]
+if q == 2 then
+    write("(There is an absence of dust where my mail key used to be.)")
+elseif q == 1 then
+    write("(My mailbox key is resting atop the nightstand.)")
+    if choice({"Take it", "Leave it"}) == 0 then
+        write([[
+(Might as well check.)
+You grabbed the /!MAILKEY/.
+]])
+        set_flag("quest/mail", 2)
+    else
+        write("(I probably don't have mail anyway.)")
+    end
+else
+    write("(There are several extra pillowcases inside the drawer.)")
+end
+"""
+r = { x = 206, y = 221, w = 22, h = 18 }
+
+[[layout.transitions]]
+name = "to_hallway"
+enter_dir = "South"
+to_room = "home_hallway"
+to_transition = "from_home"
+default = false
+is_save_point = false
+r = { x = 340, y = 340, w = 40, h = 20 }
+
+[[layout.transitions]]
+name = "from_hallway"
+enter_dir = "North"
+default = true
+is_save_point = false
+r = { x = 340, y = 320, w = 40, h = 20 }

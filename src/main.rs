@@ -70,7 +70,7 @@ fn main() -> eyre::Result<()> {
         dd.clear_background(Color::BLACK);
 
         if is_in_editor {
-            editor.draw(&mut dd, s, frame);
+            editor.draw(&mut dd, s, frame)?;
         } else {
             state::draw(&mut dd, &mut game, s, frame)?;
         }

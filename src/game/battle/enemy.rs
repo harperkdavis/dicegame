@@ -105,8 +105,8 @@ impl Content for EnemyDef {
     type Asset = EnemyAsset;
 
     fn load(ctx: Self::Context, res: &crate::res::Res, data: &'static [u8]) -> eyre::Result<Self> {
-        let enemy_def: Self =
-            toml::from_slice(data).map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
+        let enemy_def: Self = toml_edit::de::from_slice(data)
+            .map_err(|e| eyre::eyre!("failed to deserialize item: {e}"))?;
 
         // panic if texture is not valid
         res.tex(enemy_def.sprite.as_str());
